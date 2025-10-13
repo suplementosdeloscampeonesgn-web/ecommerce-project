@@ -1,0 +1,116 @@
+from fastapi import APIRouter, HTTPException, status, Depends
+from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from sqlalchemy.exc import IntegrityError
+from jose import jwt
+import os
+
+from core.database import get_db
+from core.security import create_access_token, verify_google_token, hash_password, verify_password
+from models.user import User, UserRole, AuthProvider
+
+router = APIRouter()
+
+ADMIN_EMAIL = "suplementosdeloscampeonesgn@gmail.com"
+ADMIN_PASSWORD = "ScampGn19"
+SECRET_KEY = os.getenv("SECRET_KEY")
+ALGORITHM = "HS256"
+
+# -------- Schemas --------
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+class GoogleLoginRequest(BaseModel):
+    token_id: str
+
+class RegisterRequest(BaseModel):
+    name: str
+    email: str
+    password: str
+
+# ------ Endpoints ------
+
+@router.post("/login")
+async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
+    # Permite login admin hardcodeado solo si coincide
+    if data.email == ADMIN_EMAIL and data.password == ADMIN_PASSWORD:
+        token = create_access_token({"sub": data.email, "role": "admin"})
+        return {
+            "access_token": token,
+            "role": "admin",
+            "email": data.email
+        }
+
+    # Permite login para cualquier usuario registrado en DB
+    result = await db.execute(select(User).where(User.email == data.email))
+    user = result.scalar_one_or_none()
+    if not user or not verify_password(data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Credenciales incorrectas"
+        )
+    token = create_access_token({
+        "sub": user.email,
+        "role": user.role.value,
+        "name": user.name
+    })
+    return {
+        "access_token": token,
+        "role": user.role.value,
+        "email": user.email
+    }
+
+@router.post("/google-login")
+async def google_login(data: GoogleLoginRequest):
+    userinfo = verify_google_token(data.token_id)
+    if not userinfo:
+        raise HTTPException(status_code=401, detail="Token Google inválido o email no verificado")
+    token = create_access_token({
+        "sub": userinfo["email"],
+        "google_id": userinfo["sub"],
+        "role": "user"  # Si manejas diferentes roles en Google, ajusta aquí
+    })
+    return {
+        "access_token": token,
+        "role": "user",
+        "email": userinfo["email"]
+    }
+
+@router.post("/register")
+async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
+    # Checa duplicado
+    result = await db.execute(select(User).where(User.email == data.email))
+    existing = result.scalar_one_or_none()
+    if existing:
+        raise HTTPException(status_code=400, detail="El correo ya está registrado")
+
+    new_user = User(
+        email=data.email,
+        name=data.name,
+        hashed_password=hash_password(data.password),
+        provider=AuthProvider.EMAIL,
+        role=UserRole.USER,
+        is_active=True
+    )
+    db.add(new_user)
+    try:
+        await db.commit()
+    except IntegrityError:
+        raise HTTPException(status_code=400, detail="No se pudo registrar el usuario")
+
+    token = create_access_token({
+        "sub": new_user.email,
+        "role": new_user.role.value,
+        "name": new_user.name
+    })
+    return {
+        "access_token": token,
+        "role": new_user.role.value,
+        "email": new_user.email
+    }
+
+@router.get("/status")
+async def auth_status():
+    return {"authenticated": False, "user": None}
