@@ -12,6 +12,7 @@ import {
 } from 'recharts';
 
 // --- SIMULACIÓN DE DATOS DE API MÁS COMPLEJOS ---
+// Nota: Dejaré los datos de prueba para que el componente siga funcionando visualmente.
 const mockApiData = {
   stats: [
     { title: 'Ingresos (Mes)', value: '$12,450', Icon: MonetizationOn, color: 'success.main' },
@@ -68,11 +69,20 @@ function DashboardPage() {
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
-      // Simula una llamada real a la API:
-      // const response = await axios.get('/api/admin/dashboard');
+      
+      // ✅ CORRECCIÓN: La línea de la llamada a la API ahora está lista para producción.
+      // Cuando quieras usar datos reales, descomenta las dos líneas de axios
+      // y comenta o elimina las dos líneas de datos de prueba (mockApiData).
+      
+      // const API_URL = `${import.meta.env.VITE_API_URL}/api/admin/dashboard`;
+      // const response = await axios.get(API_URL);
       // setDashboardData(response.data);
+
+      // --- Datos de prueba (eliminar al usar la API real) ---
       await new Promise(resolve => setTimeout(resolve, 1000));
       setDashboardData(mockApiData);
+      // ----------------------------------------------------
+
       setLoading(false);
     };
     fetchData();
@@ -84,6 +94,11 @@ function DashboardPage() {
         <CircularProgress size={60} />
       </Box>
     );
+  }
+
+  // Se añade una comprobación por si dashboardData sigue siendo nulo
+  if (!dashboardData) {
+    return <Typography>No se pudieron cargar los datos del dashboard.</Typography>;
   }
 
   return (

@@ -20,8 +20,12 @@ export default function Shop() {
   const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
+    // 1. Obtenemos la URL de la API desde las variables de entorno
+    const API_URL = import.meta.env.VITE_API_URL;
+
     setLoading(true);
-    axios.get("/api/products")
+    // 2. Usamos la URL completa para la petición
+    axios.get(`${API_URL}/api/products`) // <-- LÍNEA CORREGIDA
       .then(res => {
         if (Array.isArray(res.data)) {
           setProducts(res.data);

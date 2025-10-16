@@ -5,11 +5,6 @@ import axios from 'axios';
 import { jwtDecode } from 'jwt-decode';
 import { useAuth } from '../context/AuthContext';
 
-// En un proyecto profesional, estas URLs estarían en un archivo .env
-const API_BASE_URL = 'http://localhost:8000/api/auth';
-const LOGIN_API_URL = `${API_BASE_URL}/login`;
-const GOOGLE_API_URL = `${API_BASE_URL}/google-login`;
-
 /**
  * Componente de Login para autenticación de usuarios.
  * Soporta login tradicional (email/contraseña) y login con Google.
@@ -73,17 +68,19 @@ function Login() {
     setError('');
     setIsLoading(true);
 
+    // ✅ CORRECCIÓN: La URL se construye dinámicamente
+    const LOGIN_URL = `${import.meta.env.VITE_API_URL}/api/auth/login`;
+
     try {
-      const response = await axios.post(LOGIN_API_URL, formData);
+      const response = await axios.post(LOGIN_URL, formData);
       if (response.data.access_token) {
         handleLoginSuccess(response.data.access_token);
       }
     } catch (err) {
-      // Intenta obtener un mensaje de error específico de la API, si no, usa uno genérico.
       const errorMessage = err.response?.data?.detail || 'Credenciales incorrectas o error en el servidor.';
       setError(errorMessage);
     } finally {
-      setIsLoading(false); // Se asegura de que el estado de carga termine siempre.
+      setIsLoading(false);
     }
   };
 
@@ -92,10 +89,13 @@ function Login() {
    */
   const handleGoogleSuccess = async (credentialResponse) => {
     setError('');
-    setIsLoading(true); // Se puede activar un spinner global aquí si se desea
+    setIsLoading(true);
+
+    // ✅ CORRECCIÓN: La URL se construye dinámicamente
+    const GOOGLE_LOGIN_URL = `${import.meta.env.VITE_API_URL}/api/auth/google-login`;
 
     try {
-      const response = await axios.post(GOOGLE_API_URL, {
+      const response = await axios.post(GOOGLE_LOGIN_URL, {
         token_id: credentialResponse.credential,
       });
       if (response.data.access_token) {

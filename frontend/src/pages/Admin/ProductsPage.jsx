@@ -10,7 +10,8 @@ import { useForm } from 'react-hook-form';
 import { Add, Edit, Delete, Image as ImageIcon, Close as CloseIcon } from '@mui/icons-material';
 import { uploadImage } from '../../utils/uploadImageToFirebase';
 
-const API_URL = '/api/products';
+// ✅ CORRECCIÓN: Se define la URL base de la API usando variables de entorno
+const API_URL = `${import.meta.env.VITE_API_URL}/api/products`;
 
 function ProductsPage() {
   const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm();
@@ -81,7 +82,6 @@ function ProductsPage() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  // ADAPTACIÓN: ENVÍO SOLO URL, SUBIDA A FIREBASE
   const onSubmit = async (data) => {
     setIsSubmitting(true);
     let imageUrl = editingProduct?.imageUrl || "";
@@ -89,12 +89,11 @@ function ProductsPage() {
       imageUrl = await uploadImage(data.image[0], "productos");
     }
     
-// JSON al backend, NO formData
-const body = {
-  ...data,
-  image_url: imageUrl, // <-- CAMBIO CLAVE: La propiedad ahora se llama "image_url"
-  image: undefined
-};
+    const body = {
+      ...data,
+      image_url: imageUrl,
+      image: undefined
+    };
 
     try {
       if (editingProduct) {

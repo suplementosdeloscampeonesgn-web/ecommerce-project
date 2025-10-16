@@ -14,9 +14,11 @@ export default function ProductDetail() {
   useEffect(() => {
     setLoading(true);
     const fetchProduct = async () => {
+      // ✅ CORRECCIÓN: Se construye la URL completa usando la variable de entorno
+      const PRODUCT_URL = `${import.meta.env.VITE_API_URL}/api/products/${id}`;
+
       try {
-        // CORRECCIÓN: Se usa una URL relativa para que funcione en cualquier entorno.
-        const response = await fetch(`/api/products/${id}`);
+        const response = await fetch(PRODUCT_URL);
         if (!response.ok) {
           throw new Error('El producto no fue encontrado.');
         }
@@ -59,7 +61,6 @@ export default function ProductDetail() {
     return <div className="text-center py-5">Producto no disponible.</div>;
   }
   
-  // CORRECCIÓN: Lógica de imagen simplificada para usar la URL de Firebase.
   const imageUrl = product.image_url || "https://placehold.co/600x600/e2e8f0/333333?text=Producto";
 
   return (

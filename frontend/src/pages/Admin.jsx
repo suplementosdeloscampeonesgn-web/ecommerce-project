@@ -61,8 +61,12 @@ export default function Admin() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoginError('');
+    
+    // ✅ CORRECCIÓN: La URL se construye dinámicamente
+    const LOGIN_URL = `${import.meta.env.VITE_API_URL}/api/auth/login`;
+
     try {
-      const res = await fetch("http://localhost:8000/api/auth/login", {
+      const res = await fetch(LOGIN_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
@@ -81,8 +85,12 @@ export default function Admin() {
   // Login Google (usa el tokenId devuelto por el componente GoogleLogin)
   const handleGoogleLogin = async (credentialResponse) => {
     setLoginError('');
+
+    // ✅ CORRECCIÓN: La URL se construye dinámicamente
+    const GOOGLE_LOGIN_URL = `${import.meta.env.VITE_API_URL}/api/auth/google-login`;
+    
     try {
-      const res = await fetch("http://localhost:8000/api/auth/google-login", {
+      const res = await fetch(GOOGLE_LOGIN_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token_id: credentialResponse.credential }),

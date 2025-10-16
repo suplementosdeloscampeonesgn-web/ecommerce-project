@@ -2,8 +2,6 @@ import { useState } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 
-const API_URL = 'http://localhost:8000/api/auth/register';
-
 function Register() {
   const { login } = useAuth();
   const [form, setForm] = useState({ name: '', email: '', password: '' });
@@ -18,8 +16,12 @@ function Register() {
     e.preventDefault();
     setRegisterError('');
     setIsLoading(true);
+
+    // ✅ CORRECCIÓN: Se construye la URL completa usando la variable de entorno
+    const REGISTER_URL = `${import.meta.env.VITE_API_URL}/api/auth/register`;
+
     try {
-      const res = await axios.post(API_URL, form);
+      const res = await axios.post(REGISTER_URL, form);
       if (res.data && res.data.access_token) {
         login({ token: res.data.access_token }); // Auto-login tras registro
         window.location.href = '/';

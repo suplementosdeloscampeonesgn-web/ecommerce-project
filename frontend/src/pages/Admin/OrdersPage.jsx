@@ -2,58 +2,40 @@ import React, { useState, useEffect } from 'react';
 import { 
   Box, CircularProgress, Typography, Chip, Dialog, DialogTitle, 
   DialogContent, List, ListItem, ListItemText, Divider, Grid,
-  Menu, MenuItem, Button, Snackbar, Alert, TextField
+  Menu, MenuItem, Button, Snackbar, Alert, TextField, DialogActions
 } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import { Visibility as ViewIcon, Search as SearchIcon } from '@mui/icons-material';
+import axios from 'axios'; // Se importa Axios para las llamadas reales a la API
 
-// --- SIMULACIÓN DE DATOS Y API ---
-const mockOrdersData = [
-  { 
-    id: '#1256', 
-    customer: { name: 'Juan Pérez', email: 'juan.perez@email.com' },
-    date: '2025-10-08T10:30:00Z', 
-    total: 84.98, 
-    status: 'Completado',
-    shippingAddress: 'Av. Siempre Viva 123, Springfield',
-    products: [
-      { id: 1, name: 'Proteína Whey Gold', quantity: 1, price: 59.99 },
-      { id: 2, name: 'Creatina Monohidratada', quantity: 1, price: 24.99 },
-    ]
-  },
-  { 
-    id: '#1255', 
-    customer: { name: 'Ana Gómez', email: 'ana.gomez@email.com' },
-    date: '2025-10-08T09:15:00Z', 
-    total: 112.50, 
-    status: 'Enviado',
-    shippingAddress: 'Calle Falsa 456, Shelbyville',
-    products: [
-      { id: 3, name: 'BCAAs en Polvo', quantity: 2, price: 34.50 },
-      { id: 1, name: 'Proteína Whey Gold', quantity: 1, price: 59.99 },
-    ]
-  },
-  { 
-    id: '#1254', 
-    customer: { name: 'Carlos Ruiz', email: 'carlos.ruiz@email.com' },
-    date: '2025-10-07T18:00:00Z', 
-    total: 45.00, 
-    status: 'Pendiente',
-    shippingAddress: 'Blvd. de los Sueños Rotos 789, Capital City',
-    products: [
-      { id: 2, name: 'Creatina Monohidratada', quantity: 1, price: 24.99 },
-      { id: 4, name: 'Shaker Pro', quantity: 1, price: 20.01 },
-    ]
-  },
-];
+// --- CONFIGURACIÓN DE LA API ---
+// ✅ CORRECCIÓN: Se define la URL base de la API usando variables de entorno
+const API_URL = `${import.meta.env.VITE_API_URL}/api/admin/orders`;
+
+// --- FUNCIONES DE API REALES ---
+const fetchOrdersApi = async () => {
+  const response = await axios.get(API_URL, {
+    // Aquí puedes añadir headers de autorización si los necesitas
+    // headers: { 'Authorization': `Bearer ${token}` }
+  });
+  return response.data;
+};
+
+const updateOrderStatusApi = async (orderId, newStatus) => {
+  // El ID del pedido usualmente contiene caracteres que deben ser codificados en una URL
+  const encodedOrderId = encodeURIComponent(orderId);
+  const response = await axios.patch(`${API_URL}/${encodedOrderId}`, { status: newStatus });
+  return response.data;
+};
+
+
+// --- DATOS Y CONFIGURACIÓN VISUAL ---
 const statusOptions = ['Pendiente', 'Procesando', 'Enviado', 'Completado', 'Cancelado'];
 const statusChipColor = {
   'Completado': 'success', 'Enviado': 'info', 'Procesando': 'primary', 
   'Pendiente': 'warning', 'Cancelado': 'error',
 };
 
-const fetchOrdersApi = async () => { await new Promise(r => setTimeout(r, 1000)); return mockOrdersData; };
-const updateOrderStatusApi = async (orderId, newStatus) => { await new Promise(r => setTimeout(r, 500)); const order = mockOrdersData.find(o => o.id === orderId); if (order) order.status = newStatus; return order; };
 
 function OrdersPage() {
   // --- ESTADOS DEL COMPONENTE ---
@@ -71,10 +53,9 @@ function OrdersPage() {
   }, []);
 
   useEffect(() => {
-    // Este efecto se ejecuta cada vez que el texto de búsqueda cambia
     const filtered = orders.filter(order => 
-      order.id.toLowerCase().includes(searchText.toLowerCase()) ||
-      order.customer.name.toLowerCase().includes(searchText.toLowerCase())
+      (order.id?.toString().toLowerCase() || '').includes(searchText.toLowerCase()) ||
+      (order.customer?.name?.toLowerCase() || '').includes(searchText.toLowerCase())
     );
     setFilteredOrders(filtered);
   }, [searchText, orders]);
@@ -87,6 +68,7 @@ function OrdersPage() {
       setOrders(fetchedOrders);
       setFilteredOrders(fetchedOrders);
     } catch (error) {
+      console.error("Error fetching orders:", error);
       setSnackbar({ open: true, message: 'Error al cargar los pedidos', severity: 'error' });
     } finally {
       setLoading(false);
@@ -106,62 +88,63 @@ function OrdersPage() {
       setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
       setSnackbar({ open: true, message: `Estado del pedido ${orderId} actualizado`, severity: 'success' });
     } catch (error) {
+      console.error("Error updating order status:", error);
       setSnackbar({ open: true, message: 'Error al actualizar el estado', severity: 'error' });
     }
   };
-
-  // --- DEFINICIÓN DE COLUMNAS (CORREGIDA Y ROBUSTA) ---
+  
+  // El resto del componente (columnas y JSX) permanece igual...
+  
   const columns = [
-    { field: 'id', headerName: 'ID Pedido', width: 120 },
-    { 
-      field: 'customerName', 
-      headerName: 'Cliente', 
-      width: 200,
-      valueGetter: (value, row) => row.customer?.name || ''
-    },
-    { 
-      field: 'date', 
-      headerName: 'Fecha', 
-      width: 180, 
-      type: 'dateTime',
-      valueGetter: (value, row) => new Date(row.date) 
-    },
-    { 
-      field: 'total', 
-      headerName: 'Total', 
-      width: 120, 
-      type: 'number',
-      renderCell: (params) => <Typography>{`$${params.value.toFixed(2)}`}</Typography>
-    },
-    {
-      field: 'status',
-      headerName: 'Estado',
-      width: 150,
-      renderCell: (params) => (
-        <Chip 
-          label={params.value} 
-          color={statusChipColor[params.value] || 'default'} 
-          size="small"
-          onClick={(e) => handleStatusMenuOpen(e, params.row.id)}
-          sx={{ cursor: 'pointer', textTransform: 'capitalize', fontWeight: 'bold' }}
-        />
-      ),
-    },
-    {
-      field: 'actions',
-      headerName: 'Acciones',
-      sortable: false,
-      filterable: false,
-      width: 120,
-      renderCell: (params) => (
-        <Button startIcon={<ViewIcon />} onClick={() => handleViewDetails(params.row)} size="small">
-          Detalles
-        </Button>
-      ),
-    },
+     { field: 'id', headerName: 'ID Pedido', width: 120 },
+     { 
+       field: 'customerName', 
+       headerName: 'Cliente', 
+       width: 200,
+       valueGetter: (value, row) => row.customer?.name || ''
+     },
+     { 
+       field: 'date', 
+       headerName: 'Fecha', 
+       width: 180, 
+       type: 'dateTime',
+       valueGetter: (value, row) => new Date(row.date) 
+     },
+     { 
+       field: 'total', 
+       headerName: 'Total', 
+       width: 120, 
+       type: 'number',
+       renderCell: (params) => <Typography>{`$${params.value.toFixed(2)}`}</Typography>
+     },
+     {
+       field: 'status',
+       headerName: 'Estado',
+       width: 150,
+       renderCell: (params) => (
+         <Chip 
+           label={params.value} 
+           color={statusChipColor[params.value] || 'default'} 
+           size="small"
+           onClick={(e) => handleStatusMenuOpen(e, params.row.id)}
+           sx={{ cursor: 'pointer', textTransform: 'capitalize', fontWeight: 'bold' }}
+         />
+       ),
+     },
+     {
+       field: 'actions',
+       headerName: 'Acciones',
+       sortable: false,
+       filterable: false,
+       width: 120,
+       renderCell: (params) => (
+         <Button startIcon={<ViewIcon />} onClick={() => handleViewDetails(params.row)} size="small">
+           Detalles
+         </Button>
+       ),
+     },
   ];
 
-  // --- RENDERIZADO DEL COMPONENTE ---
   return (
     <Box sx={{ width: '100%' }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
@@ -189,14 +172,12 @@ function OrdersPage() {
         />
       </Box>
 
-      {/* Menú para cambiar el estado */}
       <Menu anchorEl={statusMenu.anchorEl} open={Boolean(statusMenu.anchorEl)} onClose={handleStatusMenuClose}>
         {statusOptions.map((status) => (
           <MenuItem key={status} onClick={() => handleStatusUpdate(status)}>{status}</MenuItem>
         ))}
       </Menu>
-
-      {/* Modal para ver detalles del pedido */}
+      
       <Dialog open={Boolean(selectedOrder)} onClose={handleCloseDetails} fullWidth maxWidth="sm">
         {selectedOrder && (
           <>
@@ -237,7 +218,6 @@ function OrdersPage() {
         )}
       </Dialog>
       
-      {/* Notificación de Feedback */}
       <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar({...snackbar, open: false})} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
         <Alert severity={snackbar.severity} sx={{ width: '100%' }} onClose={() => setSnackbar({...snackbar, open: false})}>
           {snackbar.message}
