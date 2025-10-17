@@ -1,11 +1,12 @@
+// ✅ CORRECCIÓN 1: Se importa 'Link' para la navegación interna
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom"; 
 import axios from "axios";
 import { useCart } from "../context/CartContext";
 import ProductCard from "../components/ProductCard";
-import HeroSlider from "../components/HeroSlider"; // Importa el nuevo componente
+import HeroSlider from "../components/HeroSlider";
 import { LuDumbbell, LuFlame, LuHeartPulse } from "react-icons/lu";
 
-// Array de banners promocionales, aquí lo puedes controlar/fetch o personalizar
 const banners = [
   {
     image: "/assets/banner1.jpg",
@@ -23,7 +24,6 @@ const banners = [
   }
 ];
 
-// Tarjetas informativas fijas
 const infoCards = [
   {
     id: "proteinas",
@@ -57,7 +57,8 @@ function QuickInfoCard({ title, description, link, button, Icon }) {
       <Icon style={{ width: 48, height: 48 }} className="text-warning mb-3" />
       <div className="fw-bold fs-4 text-warning mb-2 text-center">{title}</div>
       <div className="text-white-50 small mb-4 text-center">{description}</div>
-      <a href={link} className="btn btn-warning text-dark fw-bold rounded-pill px-4 py-2">{button}</a>
+      {/* ✅ CORRECCIÓN 2: Se usa <Link> en lugar de <a> */}
+      <Link to={link} className="btn btn-warning text-dark fw-bold rounded-pill px-4 py-2">{button}</Link>
     </div>
   );
 }
@@ -69,7 +70,10 @@ export default function Home() {
 
   useEffect(() => {
     setLoading(true);
-    axios.get("http://localhost:8000/api/products")
+    // ✅ CORRECCIÓN 1: La llamada a la API usa la variable de entorno
+    const API_URL = `${import.meta.env.VITE_API_URL}/api/products`;
+    
+    axios.get(API_URL)
       .then(res => setProducts(res.data.products || res.data))
       .catch(() => setProducts([]))
       .finally(() => setLoading(false));
@@ -77,10 +81,8 @@ export default function Home() {
 
   return (
     <div className="home-bg-gradient min-vh-100 pt-5">
-      {/* HERO SLIDER CONTROLADO DESDE APARTE */}
       <HeroSlider banners={banners} />
 
-      {/* TRES RECUADROS FIJOS */}
       <div className="container mb-5">
         <div className="row g-4">
           {infoCards.map(card => (
@@ -91,7 +93,6 @@ export default function Home() {
         </div>
       </div>
 
-      {/* DESTACADOS */}
       <div className="container px-3">
         <h2 className="fs-2 fw-bold mb-4 text-primary">Productos destacados</h2>
         {loading ? (
@@ -110,7 +111,6 @@ export default function Home() {
         )}
       </div>
 
-      {/* TESTIMONIOS (opcional) */}
       <section className="container my-5">
         <div className="bg-white rounded-3 shadow-lg p-5 d-flex flex-column flex-md-row align-items-center">
           <img src="/assets/user-champion.jpg" alt="" className="rounded-circle object-fit-cover mb-3 mb-md-0 me-md-4 border border-4 border-warning" style={{ height: "96px", width: "96px" }} />
