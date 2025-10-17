@@ -13,6 +13,10 @@
   ],
   "rewrites": [
     {
+      "source": "/shop",
+      "destination": "https://www.google.com"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/backend/main.py"
     },
