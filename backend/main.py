@@ -5,8 +5,8 @@ from contextlib import asynccontextmanager
 
 from core.config import settings
 from core.database import create_tables
-# NO es necesario importar los modelos aquí, 'create_tables' ya lo hace.
-from api import auth, products, cart, orders, admin
+# Se importan todos los routers, incluyendo el nuevo de categorías
+from api import auth, products, cart, orders, admin, categories
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -24,9 +24,6 @@ app = FastAPI(
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Código corregido (Permisivo para desarrollo)
-
-# Para desarrollo, permitir cualquier origen es la solución más simple.
 origins = ["*"]
 
 app.add_middleware(
@@ -37,11 +34,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
-app.include_router(products.router, prefix="/api/products", tags=["products"])
-app.include_router(cart.router, prefix="/api/cart", tags=["cart"])
-app.include_router(orders.router, prefix="/api/orders", tags=["orders"])
-app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
+# --- INCLUSIÓN DE RUTAS MODULARES ---
+# Cada parte de la API tiene su propio prefijo y archivo.
+app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
+app.include_router(products.router, prefix="/api/products", tags=["Products"])
+app.include_router(cart.router, prefix="/api/cart", tags=["Cart"])
+app.include_router(orders.router, prefix="/api/orders", tags=["Orders"])
+app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
+# ✅ Se incluye el nuevo router para las categorías
+app.include_router(categories.router, prefix="/api/categories", tags=["Categories"])
+
 
 @app.get("/")
 async def root():
