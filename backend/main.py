@@ -5,7 +5,6 @@ from contextlib import asynccontextmanager
 
 from core.config import settings
 from core.database import create_tables
-# NO es necesario importar los modelos aquí, 'create_tables' ya lo hace.
 from api import auth, products, cart, orders, admin
 
 @asynccontextmanager
@@ -24,10 +23,12 @@ app = FastAPI(
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Código corregido (Permisivo para desarrollo)
-
-# Para desarrollo, permitir cualquier origen es la solución más simple.
-origins = ["*"]
+# --- CONFIGURACIÓN DE CORS PARA PRODUCCIÓN ---
+# ✅ Se especifican los dominios permitidos.
+origins = [
+    "https://www.suplementosdeloscampeonesgn.shop", # Tu dominio de producción
+    "http://localhost:5173",                 # Tu dominio de desarrollo local
+]
 
 app.add_middleware(
     CORSMiddleware,
