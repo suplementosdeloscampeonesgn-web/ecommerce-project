@@ -1,5 +1,6 @@
 from sqlalchemy import Column, Integer, Float, String, DateTime, Boolean, ForeignKey, Enum, Text
 from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship # <-- 1. Importa 'relationship'
 from core.database import Base
 import enum
 
@@ -23,6 +24,12 @@ class Order(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
+    # --- ✅ RELACIONES AÑADIDAS ---
+    # Un pedido (Order) tiene muchos items (OrderItem)
+    items = relationship("OrderItem", back_populates="order")
+    # Un pedido (Order) pertenece a un usuario (User)
+    user = relationship("User", back_populates="orders")
+
 class OrderItem(Base):
     __tablename__ = "order_items"
     
@@ -33,6 +40,12 @@ class OrderItem(Base):
     product_price = Column(Float, nullable=False)
     quantity = Column(Integer, nullable=False)
     line_total = Column(Float, nullable=False)
+
+    # --- ✅ RELACIONES AÑADIDAS ---
+    # Un item de pedido (OrderItem) pertenece a un pedido (Order)
+    order = relationship("Order", back_populates="items")
+    # Un item de pedido (OrderItem) se refiere a un producto (Product)
+    product = relationship("Product")
 
 class Coupon(Base):
     __tablename__ = "coupons"
