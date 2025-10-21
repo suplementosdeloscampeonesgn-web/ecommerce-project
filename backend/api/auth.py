@@ -1,9 +1,10 @@
 from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.exc import IntegrityError
-from jose import jwt
+from jose import JWTError, jwt
 import os
 
 from core.database import get_db
@@ -16,6 +17,8 @@ ADMIN_EMAIL = "suplementosdeloscampeonesgn@gmail.com"
 ADMIN_PASSWORD = "ScampGn19"
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = "HS256"
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 # -------- Schemas --------
 class LoginRequest(BaseModel):
@@ -114,3 +117,27 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
 @router.get("/status")
 async def auth_status():
     return {"authenticated": False, "user": None}
+
+# --- FUNCION GLOBAL DE AUTENTICACIÓN PARA ENDPOINTS PROTEGIDOS ---
+async def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db)
+) -> User:
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="No autenticado",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise credentials_exception
+    return user
