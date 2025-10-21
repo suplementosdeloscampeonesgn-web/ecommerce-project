@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 
 from core.config import settings
 from core.database import create_tables
-from api import auth, products, cart, orders, admin
+from api import auth, products, cart, orders, admin, address  # ✅ se agregó address
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -23,11 +23,10 @@ app = FastAPI(
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# --- CONFIGURACIÓN DE CORS PARA PRODUCCIÓN ---
-# ✅ Se especifican los dominios permitidos.
+# --- CONFIGURACIÓN DE CORS ---
 origins = [
-    "https://www.suplementosdeloscampeonesgn.shop", # Tu dominio de producción
-    "http://localhost:5173",                 # Tu dominio de desarrollo local
+    "https://www.suplementosdeloscampeonesgn.shop",
+    "http://localhost:5173",
 ]
 
 app.add_middleware(
@@ -38,10 +37,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# --- REGISTRO DE RUTAS ---
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(products.router, prefix="/api/products", tags=["products"])
 app.include_router(cart.router, prefix="/api/cart", tags=["cart"])
 app.include_router(orders.router, prefix="/api/orders", tags=["orders"])
+app.include_router(address.router, prefix="/api/address", tags=["address"])  # ✅ dirección del usuario
 app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 
 @app.get("/")
