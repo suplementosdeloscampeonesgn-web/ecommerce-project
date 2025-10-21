@@ -89,21 +89,51 @@ async def create_order(
         raise HTTPException(status_code=500, detail=f"Error interno al crear el pedido: {e}")
 
 @router.get("/", response_model=List[OrderSchema])
-async def get_all_orders(db: AsyncSession = Depends(get_db)):
+async def get_all_orders(
+    db: AsyncSession = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user)
+):
     query = (
         select(OrderModel)
         .options(
             joinedload(OrderModel.user),
             joinedload(OrderModel.items).joinedload(OrderItemModel.product)
         )
+        .where(OrderModel.user_id == current_user.id)
         .order_by(OrderModel.created_at.desc())
     )
     result = await db.execute(query)
     orders = result.unique().scalars().all()
     return orders
 
+@router.get("/{order_id}", response_model=OrderSchema)
+async def get_order_detail(
+    order_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
+):
+    query = (
+        select(OrderModel)
+        .options(
+            joinedload(OrderModel.items).joinedload(OrderItemModel.product),
+            joinedload(OrderModel.user),
+        )
+        .where(OrderModel.id == order_id, OrderModel.user_id == current_user.id)
+    )
+    result = await db.execute(query)
+    order = result.unique().scalars().first()
+
+    if not order:
+        raise HTTPException(status_code=404, detail="Pedido no encontrado")
+
+    return order
+
 @router.patch("/{order_id}/status", response_model=OrderSchema)
-async def update_order_status(order_id: int, status_update: OrderStatusUpdate, db: AsyncSession = Depends(get_db)):
+async def update_order_status(
+    order_id: int,
+    status_update: OrderStatusUpdate,
+    db: AsyncSession = Depends(get_db)
+):
     result = await db.execute(select(OrderModel).where(OrderModel.id == order_id))
     db_order = result.scalar_one_or_none()
 
