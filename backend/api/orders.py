@@ -58,7 +58,6 @@ async def create_order(
         for detail in product_details_for_items:
             product = detail["product_model"]
             quantity = detail["quantity"]
-
             line_total = product.price * quantity
             order_item = OrderItemModel(
                 order_id=new_order.id,
@@ -72,8 +71,18 @@ async def create_order(
             product.stock -= quantity
 
         await db.commit()
-        await db.refresh(new_order)
-        return new_order
+        # Actualiza y recarga la orden con relaciones para serializar correctamente
+        query = (
+            select(OrderModel)
+            .options(
+                joinedload(OrderModel.user),
+                joinedload(OrderModel.items).joinedload(OrderItemModel.product)
+            )
+            .where(OrderModel.id == new_order.id)
+        )
+        result = await db.execute(query)
+        order_fresh = result.unique().scalars().first()
+        return order_fresh
 
     except Exception as e:
         await db.rollback()
