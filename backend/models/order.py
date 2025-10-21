@@ -21,13 +21,12 @@ class Order(Base):
     status = Column(Enum(OrderStatus), default=OrderStatus.PENDING)
     total_amount = Column(Float, nullable=False)
     shipping_address = Column(String, nullable=False)
+    shipping_type = Column(String(20))      # NUEVO
+    shipping_cost = Column(Float)           # NUEVO
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-    # --- ✅ RELACIONES AÑADIDAS ---
-    # Un pedido (Order) tiene muchos items (OrderItem)
     items = relationship("OrderItem", back_populates="order")
-    # Un pedido (Order) pertenece a un usuario (User)
     user = relationship("User", back_populates="orders")
 
 class OrderItem(Base):

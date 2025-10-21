@@ -5,13 +5,12 @@ from sqlalchemy.orm import joinedload
 from typing import List
 import uuid
 
-# --- Se importan los schemas y modelos correctos desde su ubicación central ---
 from schemas.order import OrderCreate, Order as OrderSchema, OrderStatusUpdate
 from models.order import Order as OrderModel, OrderItem as OrderItemModel, OrderStatus
 from models.product import Product as ProductModel
 from models.user import User as UserModel
 from core.database import get_db
-from api.auth import get_current_user # Asumo que tienes esta función para obtener el usuario
+from api.auth import get_current_user
 
 router = APIRouter()
 
@@ -19,20 +18,11 @@ router = APIRouter()
 async def create_order(
     order_data: OrderCreate, 
     db: AsyncSession = Depends(get_db),
-    # --- Se usa el usuario autenticado en lugar de un ID de ejemplo ---
-    current_user: UserModel = Depends(get_current_user) 
+    current_user: UserModel = Depends(get_current_user)
 ):
-    """
-    Crea una nueva orden.
-    1. Valida los productos y calcula el total en el backend para seguridad.
-    2. Crea el registro del pedido (Order).
-    3. Crea los registros de los items del pedido (OrderItem).
-    4. Actualiza el stock de los productos.
-    """
     total_amount = 0.0
     product_details_for_items = []
 
-    # --- 1. Verificación y Cálculo del Total ---
     for item_in_cart in order_data.items:
         result = await db.execute(select(ProductModel).where(ProductModel.id == item_in_cart.product_id))
         product_in_db = result.scalar_one_or_none()
@@ -48,24 +38,25 @@ async def create_order(
             "quantity": item_in_cart.quantity
         })
 
-    # --- 2. Creación del Pedido y sus Items ---
-    try:
-        # Genera un número de orden único
-        order_number = f"GN-{func.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
+    # NUEVO: Suma el costo de envío al total
+    total_amount += order_data.shipping_cost or 0
 
-        # Crea la orden principal
+    try:
+        order_number = f"GN-{uuid.uuid4().hex[:6].upper()}"
+
         new_order = OrderModel(
             user_id=current_user.id,
             total_amount=total_amount,
             status=OrderStatus.PENDING,
             payment_method=order_data.payment_method,
             shipping_address=order_data.shipping_address,
+            shipping_type=order_data.shipping_type,     # NUEVO
+            shipping_cost=order_data.shipping_cost,     # NUEVO
             order_number=order_number
         )
         db.add(new_order)
-        await db.flush()  # Para obtener el ID del new_order
+        await db.flush()
 
-        # Crea los items del pedido y actualiza el stock
         for detail in product_details_for_items:
             product = detail["product_model"]
             quantity = detail["quantity"]
@@ -82,7 +73,7 @@ async def create_order(
             )
             db.add(order_item)
             
-            product.stock -= quantity # Descuenta el stock
+            product.stock -= quantity
 
         await db.commit()
         await db.refresh(new_order)
@@ -92,7 +83,6 @@ async def create_order(
         await db.rollback()
         raise HTTPException(status_code=500, detail=f"Error interno al crear el pedido: {e}")
 
-# (Opcional) Aquí están tus otras rutas, también corregidas para consistencia
 @router.get("/", response_model=List[OrderSchema])
 async def get_all_orders(db: AsyncSession = Depends(get_db)):
     query = (
@@ -115,7 +105,7 @@ async def update_order_status(order_id: int, status_update: OrderStatusUpdate, d
     if not db_order:
         raise HTTPException(status_code=404, detail="Pedido no encontrado")
 
-    db_order.status = OrderStatus[status_update.status.upper()] # Usa el Enum para validar
+    db_order.status = OrderStatus[status_update.status.upper()]
     await db.commit()
     await db.refresh(db_order)
     return db_order
