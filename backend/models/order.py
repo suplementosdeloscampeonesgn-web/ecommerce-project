@@ -22,7 +22,8 @@ class Order(Base):
     total_amount = Column(Float, nullable=False)
     shipping_address = Column(String, nullable=False)
     shipping_type = Column(String(20))      # NUEVO
-    shipping_cost = Column(Float)           # NUEVO
+    shipping_cost = Column(Float)      
+    payment_method = Column(String, nullable=False)     # NUEVO
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
