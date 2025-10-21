@@ -1,5 +1,6 @@
 from sqlalchemy import Column, Integer, String, Boolean, Enum, DateTime
 from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
 from core.database import Base
 import enum
 
@@ -24,3 +25,6 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # RELACIÓN que permite back_populates desde Order
+    orders = relationship("Order", back_populates="user")
