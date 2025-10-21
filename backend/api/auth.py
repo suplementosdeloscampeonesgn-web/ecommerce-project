@@ -13,6 +13,7 @@ from models.user import User, UserRole, AuthProvider
 
 router = APIRouter()
 
+# --- CONFIGURACIÓN ---
 ADMIN_EMAIL = "suplementosdeloscampeonesgn@gmail.com"
 ADMIN_PASSWORD = "ScampGn19"
 SECRET_KEY = os.getenv("SECRET_KEY")
@@ -20,7 +21,7 @@ ALGORITHM = "HS256"
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
-# -------- Schemas --------
+# --- SCHEMAS ---
 class LoginRequest(BaseModel):
     email: str
     password: str
@@ -33,11 +34,10 @@ class RegisterRequest(BaseModel):
     email: str
     password: str
 
-# ------ Endpoints ------
-
+# --- LOGIN USUARIO / ADMIN ---
 @router.post("/login")
 async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
-    # Permite login admin hardcodeado solo si coincide
+    # --- LOGIN ADMIN ---
     if data.email == ADMIN_EMAIL and data.password == ADMIN_PASSWORD:
         token = create_access_token({"sub": data.email, "role": "admin"})
         return {
@@ -46,49 +46,57 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
             "email": data.email
         }
 
-    # Permite login para cualquier usuario registrado en DB
+    # --- LOGIN USUARIO NORMAL ---
     result = await db.execute(select(User).where(User.email == data.email))
     user = result.scalar_one_or_none()
+
     if not user or not verify_password(data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Credenciales incorrectas"
         )
+
     token = create_access_token({
         "sub": user.email,
         "role": user.role.value,
         "name": user.name
     })
+
     return {
         "access_token": token,
         "role": user.role.value,
         "email": user.email
     }
 
+# --- LOGIN CON GOOGLE ---
 @router.post("/google-login")
 async def google_login(data: GoogleLoginRequest):
     userinfo = verify_google_token(data.token_id)
     if not userinfo:
         raise HTTPException(status_code=401, detail="Token Google inválido o email no verificado")
+
     token = create_access_token({
         "sub": userinfo["email"],
         "google_id": userinfo["sub"],
-        "role": "user"  # Si manejas diferentes roles en Google, ajusta aquí
+        "role": "user"
     })
+
     return {
         "access_token": token,
         "role": "user",
         "email": userinfo["email"]
     }
 
+# --- REGISTRO DE NUEVOS USUARIOS ---
 @router.post("/register")
 async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
-    # Checa duplicado
+    # Revisar si el correo ya existe
     result = await db.execute(select(User).where(User.email == data.email))
-    existing = result.scalar_one_or_none()
-    if existing:
+    existing_user = result.scalar_one_or_none()
+    if existing_user:
         raise HTTPException(status_code=400, detail="El correo ya está registrado")
 
+    # Crear nuevo usuario
     new_user = User(
         email=data.email,
         name=data.name,
@@ -97,10 +105,13 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
         role=UserRole.USER,
         is_active=True
     )
+
     db.add(new_user)
+
     try:
         await db.commit()
     except IntegrityError:
+        await db.rollback()
         raise HTTPException(status_code=400, detail="No se pudo registrar el usuario")
 
     token = create_access_token({
@@ -108,26 +119,29 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
         "role": new_user.role.value,
         "name": new_user.name
     })
+
     return {
         "access_token": token,
         "role": new_user.role.value,
         "email": new_user.email
     }
 
+# --- VERIFICAR AUTENTICACIÓN ---
 @router.get("/status")
 async def auth_status():
     return {"authenticated": False, "user": None}
 
-# --- FUNCION GLOBAL DE AUTENTICACIÓN PARA ENDPOINTS PROTEGIDOS ---
+# --- FUNCIÓN GLOBAL DE AUTENTICACIÓN ---
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db)
 ) -> User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="No autenticado",
+        detail="No autenticado o token inválido",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         email: str = payload.get("sub")
@@ -140,4 +154,5 @@ async def get_current_user(
     user = result.scalar_one_or_none()
     if user is None:
         raise credentials_exception
+
     return user
