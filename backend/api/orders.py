@@ -71,7 +71,7 @@ async def create_order(
             product.stock -= quantity
 
         await db.commit()
-        # Actualiza y recarga la orden con relaciones para serializar correctamente
+        # Recarga la orden creada, con user e items, para serializar bien la respuesta
         query = (
             select(OrderModel)
             .options(
