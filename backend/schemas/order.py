@@ -9,8 +9,8 @@ class OrderItemCreate(BaseModel):
 class OrderCreate(BaseModel):
     payment_method: str
     shipping_address: str
-    shipping_type: str      # NUEVO: branch o delivery
-    shipping_cost: float    # NUEVO: costo de envío
+    shipping_type: str       # NUEVO: branch o delivery
+    shipping_cost: float     # NUEVO: costo de envío
     items: List[OrderItemCreate]
 
 class ProductInOrder(BaseModel):
@@ -22,12 +22,16 @@ class UserInOrder(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     email: str
+    name: Optional[str]      # ✅ Añado nombre (aparece para admin)
 
 class OrderItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
+    id: int
     quantity: int
     product_price: float
-    product: ProductInOrder
+    product_id: int
+    product_name: str
+    product: Optional[ProductInOrder] = None
 
 class Order(BaseModel):
     model_config = ConfigDict(from_attributes=True)

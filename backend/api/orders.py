@@ -1,29 +1,54 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 from sqlalchemy.orm import joinedload
+from sqlalchemy import select
 from typing import List
-import uuid
-
-from schemas.order import OrderCreate, Order as OrderSchema, OrderStatusUpdate
-from models.order import Order as OrderModel, OrderItem as OrderItemModel, OrderStatus
+from core.database import get_db
+from models.order import (
+    Order as OrderModel,
+    OrderItem as OrderItemModel,
+    Coupon,
+    OrderStatus,
+)
+from schemas.order import (
+    OrderCreate,
+    Order as OrderSchema,
+    OrderStatusUpdate,
+)
 from models.product import Product as ProductModel
 from models.user import User as UserModel
-from core.database import get_db
 from api.auth import get_current_user
+from pydantic import BaseModel
+import uuid
 
 router = APIRouter()
 
+# ----------- CUPONES -----------
+class CouponValidateRequest(BaseModel):
+    code: str
+    cart_total: float
+
+@router.post("/validate")
+async def validate_coupon(data: CouponValidateRequest, db: AsyncSession = Depends(get_db)):
+    coupon = await db.execute(Coupon.__table__.select().where(Coupon.code == data.code))
+    coupon = coupon.scalar_one_or_none()
+    if not coupon:
+        raise HTTPException(status_code=404, detail="Cupón no encontrado")
+    # Validar expiración, usos, mínimo compra aquí (lógica simplificada)
+    if coupon.minimum_amount > data.cart_total:
+        raise HTTPException(status_code=400, detail="Cart total no cumple mínimo para cupón")
+    return {"valid": True, "discount_value": coupon.discount_value, "discount_type": coupon.discount_type}
+
+# ----------- PEDIDOS DE USUARIO -----------
 @router.post("/", response_model=OrderSchema, status_code=201)
 async def create_order(
-    order_data: OrderCreate, 
+    order_data: OrderCreate,
     db: AsyncSession = Depends(get_db),
     current_user: UserModel = Depends(get_current_user)
 ):
     total_amount = 0.0
     product_details_for_items = []
 
-    # Valida productos y stock antes de crear orden
     for item_in_cart in order_data.items:
         result = await db.execute(select(ProductModel).where(ProductModel.id == item_in_cart.product_id))
         product_in_db = result.scalar_one_or_none()
@@ -37,7 +62,6 @@ async def create_order(
             "quantity": item_in_cart.quantity
         })
 
-    # Suma el costo de envío al total del pedido
     total_amount += order_data.shipping_cost or 0
 
     try:
@@ -71,7 +95,6 @@ async def create_order(
             product.stock -= quantity
 
         await db.commit()
-        # Recarga la orden creada, con user e items, para serializar bien la respuesta
         query = (
             select(OrderModel)
             .options(
@@ -144,3 +167,23 @@ async def update_order_status(
     await db.commit()
     await db.refresh(db_order)
     return db_order
+
+# ----------- PEDIDOS PARA ADMIN -----------
+@router.get("/admin", response_model=List[OrderSchema])
+async def get_all_orders_admin(
+    db: AsyncSession = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user)
+):
+    if getattr(current_user, "role", None) != "admin":
+        raise HTTPException(status_code=403, detail="No autorizado")
+    query = (
+        select(OrderModel)
+        .options(
+            joinedload(OrderModel.user),
+            joinedload(OrderModel.items).joinedload(OrderItemModel.product)
+        )
+        .order_by(OrderModel.created_at.desc())
+    )
+    result = await db.execute(query)
+    orders = result.unique().scalars().all()
+    return orders

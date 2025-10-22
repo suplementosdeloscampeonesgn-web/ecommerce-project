@@ -7,8 +7,12 @@ import os
 from sqlalchemy.ext.asyncio import AsyncSession
 from core.database import get_db
 from models.product import Product
-from sqlalchemy import select, update, delete
+from models.order import Order, OrderItem
+from models.user import User
+from sqlalchemy import select, update, delete, func, extract, desc
 from jose import jwt
+from datetime import datetime, timedelta
+from api.auth import get_current_user
 
 router = APIRouter()
 
@@ -36,9 +40,104 @@ def verify_admin_token(authorization: str = Header(...)):
     except Exception:
         raise HTTPException(status_code=401, detail="No autorizado (admin)")
 
+# ---------- ENDPOINT METRICAS DASHBOARD ----------
+@router.get("/dashboard")
+async def dashboard_metrics(
+    db: AsyncSession = Depends(get_db),
+    admin=Depends(verify_admin_token)
+):
+    now = datetime.utcnow()
+    # Ingresos (mes actual)
+    ingresos_res = await db.execute(
+        select(func.sum(Order.total_amount))
+        .where(
+            extract('month', Order.created_at) == now.month,
+            extract('year', Order.created_at) == now.year,
+            Order.status.in_(["COMPLETADO", "ENVIADO"])
+        )
+    )
+    ingresos = ingresos_res.scalar() or 0
+    # Nuevos pedidos este mes
+    pedidos_mes_res = await db.execute(
+        select(func.count(Order.id))
+        .where(
+            extract('month', Order.created_at) == now.month,
+            extract('year', Order.created_at) == now.year
+        )
+    )
+    pedidos_mes = pedidos_mes_res.scalar() or 0
+    # Nuevos clientes este mes
+    clientes_mes_res = await db.execute(
+        select(func.count(User.id))
+        .where(
+            extract('month', User.created_at) == now.month,
+            extract('year', User.created_at) == now.year
+        )
+    )
+    clientes_mes = clientes_mes_res.scalar() or 0
+
+    # Gráfica de ventas diarias (últimos 7 días)
+    salesData = []
+    for d in range(7, 0, -1):
+        date = now - timedelta(days=d)
+        ventas_res = await db.execute(
+            select(func.sum(Order.total_amount))
+            .where(
+                func.date(Order.created_at) == date.date(),
+                Order.status.in_(["COMPLETADO", "ENVIADO"])
+            )
+        )
+        ventas = ventas_res.scalar() or 0
+        salesData.append({"name": date.strftime("%d %b"), "ventas": ventas})
+
+    # Top productos vendidos
+    top_query = (
+        select(OrderItem.product_id, Product.name, func.sum(OrderItem.quantity).label("sold"))
+        .join(Product, Product.id == OrderItem.product_id)
+        .group_by(OrderItem.product_id, Product.name)
+        .order_by(desc("sold"))
+        .limit(5)
+    )
+    top_result = await db.execute(top_query)
+    topProducts = [
+        {"id": r.product_id, "name": r.name, "sold": r.sold}
+        for r in top_result.fetchall()
+    ]
+
+    # Pedidos recientes reales
+    recent_query = (
+        select(Order, User)
+        .join(User, Order.user_id == User.id)
+        .order_by(desc(Order.created_at))
+        .limit(5)
+    )
+    recent_result = await db.execute(recent_query)
+    recentOrders = []
+    for row in recent_result.fetchall():
+        order, user = row
+        recentOrders.append({
+            "id": order.id,
+            "customer": user.name if hasattr(user, "name") else "Cliente",
+            "date": order.created_at.strftime("%b %d, %Y"),
+            "total": float(order.total_amount),
+            "status": order.status,
+        })
+
+    return {
+        "stats": [
+            { "title": "Ingresos (Mes)", "value": f"${ingresos:,.2f}" },
+            { "title": "Nuevos Pedidos", "value": pedidos_mes },
+            { "title": "Nuevos Clientes", "value": clientes_mes },
+        ],
+        "salesData": salesData,
+        "topProducts": topProducts,
+        "recentOrders": recentOrders,
+    }
+
+# ---------- ENDPOINT PRODUCTOS ADMIN ----------
 @router.get("/products")
 async def get_products(
-    db: AsyncSession = Depends(get_db), 
+    db: AsyncSession = Depends(get_db),
     admin=Depends(verify_admin_token)
 ):
     result = await db.execute(select(Product).order_by(Product.created_at.desc()))
@@ -61,8 +160,8 @@ async def get_products(
 
 @router.post("/products")
 async def create_product(
-    data: dict, 
-    db: AsyncSession = Depends(get_db), 
+    data: dict,
+    db: AsyncSession = Depends(get_db),
     admin=Depends(verify_admin_token)
 ):
     new_product = Product(**data)
@@ -73,9 +172,9 @@ async def create_product(
 
 @router.put("/products/{product_id}")
 async def update_product(
-    product_id: int, 
-    data: dict, 
-    db: AsyncSession = Depends(get_db), 
+    product_id: int,
+    data: dict,
+    db: AsyncSession = Depends(get_db),
     admin=Depends(verify_admin_token)
 ):
     await db.execute(update(Product).where(Product.id == product_id).values(**data))
@@ -84,8 +183,8 @@ async def update_product(
 
 @router.delete("/products/{product_id}")
 async def delete_product(
-    product_id: int, 
-    db: AsyncSession = Depends(get_db), 
+    product_id: int,
+    db: AsyncSession = Depends(get_db),
     admin=Depends(verify_admin_token)
 ):
     await db.execute(delete(Product).where(Product.id == product_id))
@@ -94,7 +193,7 @@ async def delete_product(
 
 @router.post("/upload-images")
 async def upload_images(
-    file: UploadFile = File(...), 
+    file: UploadFile = File(...),
     admin=Depends(verify_admin_token)
 ):
     try:
@@ -116,8 +215,8 @@ async def upload_images(
 
 @router.post("/import-excel")
 async def import_excel(
-    excel: UploadFile = File(...), 
-    db: AsyncSession = Depends(get_db), 
+    excel: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
     admin=Depends(verify_admin_token)
 ):
     try:
