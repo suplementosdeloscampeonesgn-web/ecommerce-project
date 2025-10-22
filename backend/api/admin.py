@@ -1,3 +1,5 @@
+# backend/api/admin.py
+
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Header
 import cloudinary
 import cloudinary.uploader
@@ -51,7 +53,7 @@ async def dashboard_metrics(db: AsyncSession = Depends(get_db), admin=Depends(ve
             select(func.sum(Order.total_amount)).where(
                 extract("month", Order.created_at) == now.month,
                 extract("year", Order.created_at) == now.year,
-                Order.status.in_(["delivered", "shipped"])
+                Order.status.in_(["DELIVERED", "SHIPPED"])
             )
         )
         ingresos = ingresos_res.scalar() or 0
@@ -74,21 +76,18 @@ async def dashboard_metrics(db: AsyncSession = Depends(get_db), admin=Depends(ve
         )
         clientes_mes = clientes_res.scalar() or 0
 
-        # Ventas diarias para la gráfica
+        # Ventas diarias (últimos 7 días)
         salesData = []
         for d in range(7, 0, -1):
             date = now - timedelta(days=d)
             ventas_res = await db.execute(
                 select(func.sum(Order.total_amount)).where(
                     func.date(Order.created_at) == date.date(),
-                    Order.status.in_(["delivered", "shipped"])
+                    Order.status.in_(["DELIVERED", "SHIPPED"])
                 )
             )
             ventas = ventas_res.scalar() or 0
-            salesData.append({
-                "name": date.strftime("%d %b"),
-                "ventas": ventas
-            })
+            salesData.append({"name": date.strftime("%d %b"), "ventas": ventas})
 
         # Top productos más vendidos
         top_query = (
@@ -130,6 +129,7 @@ async def dashboard_metrics(db: AsyncSession = Depends(get_db), admin=Depends(ve
             "topProducts": topProducts,
             "recentOrders": recentOrders
         }
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al generar métricas: {e}")
 
@@ -220,5 +220,6 @@ async def import_excel(excel: UploadFile = File(...), db: AsyncSession = Depends
 
         await db.commit()
         return {"success": True, "imported": imported}
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al importar Excel: {e}")
