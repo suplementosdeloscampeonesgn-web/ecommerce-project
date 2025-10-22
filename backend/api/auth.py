@@ -39,7 +39,8 @@ class RegisterRequest(BaseModel):
 async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
     # --- LOGIN ADMIN ---
     if data.email == ADMIN_EMAIL and data.password == ADMIN_PASSWORD:
-        token = create_access_token({"sub": data.email, "role": "admin"})
+        # --- INCLUYE is_admin: True ---
+        token = create_access_token({"sub": data.email, "role": "admin", "is_admin": True})
         return {
             "access_token": token,
             "role": "admin",
@@ -59,7 +60,8 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
     token = create_access_token({
         "sub": user.email,
         "role": user.role.value,
-        "name": user.name
+        "name": user.name,
+        "is_admin": user.role.value == "admin"  # ---- Si el usuario tiene rol admin, también lo indica
     })
 
     return {
@@ -78,7 +80,8 @@ async def google_login(data: GoogleLoginRequest):
     token = create_access_token({
         "sub": userinfo["email"],
         "google_id": userinfo["sub"],
-        "role": "user"
+        "role": "user",
+        "is_admin": False
     })
 
     return {
@@ -117,7 +120,8 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
     token = create_access_token({
         "sub": new_user.email,
         "role": new_user.role.value,
-        "name": new_user.name
+        "name": new_user.name,
+        "is_admin": False
     })
 
     return {
