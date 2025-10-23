@@ -1,5 +1,3 @@
-# en backend/models/product.py
-
 from sqlalchemy import Column, Integer, String, Float, Boolean, Text, TIMESTAMP, text
 from core.database import Base
 

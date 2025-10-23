@@ -1,5 +1,3 @@
-# backend/api/admin.py
-
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Header
 import cloudinary
 import cloudinary.uploader
@@ -36,7 +34,8 @@ def verify_admin_token(authorization: str = Header(...)):
         if scheme.lower() != "bearer":
             raise ValueError("Invalid scheme")
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        if not payload.get("is_admin") and payload.get("role") != "admin":
+        # --------- CORREGIDO ---------
+        if not payload.get("is_admin") and payload.get("role") != "ADMIN":
             raise ValueError("Not admin")
         return payload
     except Exception:
@@ -47,8 +46,6 @@ def verify_admin_token(authorization: str = Header(...)):
 async def dashboard_metrics(db: AsyncSession = Depends(get_db), admin=Depends(verify_admin_token)):
     try:
         now = datetime.utcnow()
-
-        # Ingresos mensuales
         ingresos_res = await db.execute(
             select(func.sum(Order.total_amount)).where(
                 extract("month", Order.created_at) == now.month,
@@ -57,8 +54,6 @@ async def dashboard_metrics(db: AsyncSession = Depends(get_db), admin=Depends(ve
             )
         )
         ingresos = ingresos_res.scalar() or 0
-
-        # Nuevos pedidos este mes
         pedidos_mes_res = await db.execute(
             select(func.count(Order.id)).where(
                 extract("month", Order.created_at) == now.month,
@@ -66,8 +61,6 @@ async def dashboard_metrics(db: AsyncSession = Depends(get_db), admin=Depends(ve
             )
         )
         pedidos_mes = pedidos_mes_res.scalar() or 0
-
-        # Nuevos clientes este mes
         clientes_res = await db.execute(
             select(func.count(User.id)).where(
                 extract("month", User.created_at) == now.month,
@@ -76,7 +69,6 @@ async def dashboard_metrics(db: AsyncSession = Depends(get_db), admin=Depends(ve
         )
         clientes_mes = clientes_res.scalar() or 0
 
-        # Ventas diarias (últimos 7 días)
         salesData = []
         for d in range(7, 0, -1):
             date = now - timedelta(days=d)
@@ -89,7 +81,6 @@ async def dashboard_metrics(db: AsyncSession = Depends(get_db), admin=Depends(ve
             ventas = ventas_res.scalar() or 0
             salesData.append({"name": date.strftime("%d %b"), "ventas": ventas})
 
-        # Top productos más vendidos
         top_query = (
             select(OrderItem.product_id, Product.name, func.sum(OrderItem.quantity).label("sold"))
             .join(Product, Product.id == OrderItem.product_id)
@@ -103,7 +94,6 @@ async def dashboard_metrics(db: AsyncSession = Depends(get_db), admin=Depends(ve
             for r in top_result.fetchall()
         ]
 
-        # Pedidos recientes
         recent_query = (
             select(Order, User)
             .join(User, Order.user_id == User.id)
@@ -129,7 +119,6 @@ async def dashboard_metrics(db: AsyncSession = Depends(get_db), admin=Depends(ve
             "topProducts": topProducts,
             "recentOrders": recentOrders
         }
-
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al generar métricas: {e}")
 
@@ -220,6 +209,5 @@ async def import_excel(excel: UploadFile = File(...), db: AsyncSession = Depends
 
         await db.commit()
         return {"success": True, "imported": imported}
-
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al importar Excel: {e}")

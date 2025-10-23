@@ -1,5 +1,15 @@
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
+import enum
+
+# ---- ENUMS para validación, opcional pero recomendable ----
+class UserRoleEnum(str, enum.Enum):
+    USER = "USER"
+    ADMIN = "ADMIN"
+
+class AuthProviderEnum(str, enum.Enum):
+    GOOGLE = "GOOGLE"
+    EMAIL = "EMAIL"
 
 # ---------- Schemas de Direcciones ----------
 
@@ -33,10 +43,10 @@ class UserCreate(UserBase):
 
 class UserRead(UserBase):
     id: int
-    role: str
-    provider: str
+    role: UserRoleEnum                # <--- Ahora Enum, mayúsculas
+    provider: AuthProviderEnum        # <--- Ahora Enum, mayúsculas
     is_active: bool
-    addresses: Optional[List[AddressRead]] = []   # <-- Lista de direcciones asociadas
+    addresses: Optional[List[AddressRead]] = []
 
     class Config:
         from_attributes = True

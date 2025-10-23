@@ -11,6 +11,7 @@ from core.database import get_db
 from core.security import create_access_token, verify_google_token, hash_password, verify_password
 from models.user import User, UserRole, AuthProvider
 
+
 router = APIRouter()
 
 # --- CONFIGURACIÓN ---
@@ -39,11 +40,10 @@ class RegisterRequest(BaseModel):
 async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
     # --- LOGIN ADMIN ---
     if data.email == ADMIN_EMAIL and data.password == ADMIN_PASSWORD:
-        # --- INCLUYE is_admin: True ---
-        token = create_access_token({"sub": data.email, "role": "admin", "is_admin": True})
+        token = create_access_token({"sub": data.email, "role": "ADMIN", "is_admin": True})
         return {
             "access_token": token,
-            "role": "admin",
+            "role": "ADMIN",
             "email": data.email
         }
 
@@ -61,7 +61,7 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
         "sub": user.email,
         "role": user.role.value,
         "name": user.name,
-        "is_admin": user.role.value == "admin"  # ---- Si el usuario tiene rol admin, también lo indica
+        "is_admin": user.role.value == "ADMIN"
     })
 
     return {
@@ -80,26 +80,24 @@ async def google_login(data: GoogleLoginRequest):
     token = create_access_token({
         "sub": userinfo["email"],
         "google_id": userinfo["sub"],
-        "role": "user",
+        "role": "USER",
         "is_admin": False
     })
 
     return {
         "access_token": token,
-        "role": "user",
+        "role": "USER",
         "email": userinfo["email"]
     }
 
 # --- REGISTRO DE NUEVOS USUARIOS ---
 @router.post("/register")
 async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
-    # Revisar si el correo ya existe
     result = await db.execute(select(User).where(User.email == data.email))
     existing_user = result.scalar_one_or_none()
     if existing_user:
         raise HTTPException(status_code=400, detail="El correo ya está registrado")
 
-    # Crear nuevo usuario
     new_user = User(
         email=data.email,
         name=data.name,
@@ -108,9 +106,7 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
         role=UserRole.USER,
         is_active=True
     )
-
     db.add(new_user)
-
     try:
         await db.commit()
     except IntegrityError:

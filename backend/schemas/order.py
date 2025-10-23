@@ -1,6 +1,16 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, constr
 from typing import List, Optional
 from datetime import datetime
+import enum
+
+# --- ENUM MAYÚSCULAS PARA Pydantic ---
+class OrderStatusEnum(str, enum.Enum):
+    PENDING = "PENDING"
+    PAID = "PAID"
+    PROCESSING = "PROCESSING"
+    SHIPPED = "SHIPPED"
+    DELIVERED = "DELIVERED"
+    CANCELLED = "CANCELLED"
 
 class OrderItemCreate(BaseModel):
     product_id: int
@@ -9,8 +19,8 @@ class OrderItemCreate(BaseModel):
 class OrderCreate(BaseModel):
     payment_method: str
     shipping_address: str
-    shipping_type: str       # NUEVO: branch o delivery
-    shipping_cost: float     # NUEVO: costo de envío
+    shipping_type: str
+    shipping_cost: float
     items: List[OrderItemCreate]
 
 class ProductInOrder(BaseModel):
@@ -22,7 +32,7 @@ class UserInOrder(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     email: str
-    name: Optional[str]      # ✅ Añado nombre (aparece para admin)
+    name: Optional[str]
 
 class OrderItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -36,14 +46,14 @@ class OrderItem(BaseModel):
 class Order(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
-    status: str
+    status: OrderStatusEnum             # -- Ahora validado con Enum!
     total_amount: float
     shipping_address: str
-    shipping_type: str       # NUEVO
-    shipping_cost: float     # NUEVO
+    shipping_type: str
+    shipping_cost: float
     created_at: datetime
     user: UserInOrder
     items: List[OrderItem]
 
 class OrderStatusUpdate(BaseModel):
-    status: str
+    status: OrderStatusEnum             # -- Ahora validado con Enum (mayúsculas)

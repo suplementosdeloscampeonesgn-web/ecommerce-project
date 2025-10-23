@@ -34,7 +34,6 @@ async def validate_coupon(data: CouponValidateRequest, db: AsyncSession = Depend
     coupon = coupon.scalar_one_or_none()
     if not coupon:
         raise HTTPException(status_code=404, detail="Cupón no encontrado")
-    # Validar expiración, usos, mínimo compra aquí (lógica simplificada)
     if coupon.minimum_amount > data.cart_total:
         raise HTTPException(status_code=400, detail="Cart total no cumple mínimo para cupón")
     return {"valid": True, "discount_value": coupon.discount_value, "discount_type": coupon.discount_type}
@@ -174,7 +173,7 @@ async def get_all_orders_admin(
     db: AsyncSession = Depends(get_db),
     current_user: UserModel = Depends(get_current_user)
 ):
-    if getattr(current_user, "role", None) != "admin":
+    if getattr(current_user, "role", None) != "ADMIN":
         raise HTTPException(status_code=403, detail="No autorizado")
     query = (
         select(OrderModel)

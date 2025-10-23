@@ -4,13 +4,14 @@ from sqlalchemy.orm import relationship
 from core.database import Base
 import enum
 
+# ---- Enum en MAYÚSCULAS ----
 class UserRole(enum.Enum):
-    USER = "user"
-    ADMIN = "admin"
+    USER = "USER"
+    ADMIN = "ADMIN"
 
 class AuthProvider(enum.Enum):
-    GOOGLE = "google"
-    EMAIL = "email"
+    GOOGLE = "GOOGLE"
+    EMAIL = "EMAIL"
 
 class User(Base):
     __tablename__ = "users"
@@ -26,10 +27,7 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-    # Relación directa con pedidos
     orders = relationship("Order", back_populates="user")
-
-    # NUEVO: Relación uno-a-muchos con direcciones
     addresses = relationship("Address", back_populates="user", cascade="all, delete")
 
 class Address(Base):
@@ -37,15 +35,14 @@ class Address(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    name = Column(String, nullable=True)  # Ej: "Casa", "Oficina"
+    name = Column(String, nullable=True)
     address_line = Column(String, nullable=False)
     city = Column(String, nullable=False)
     state = Column(String, nullable=False)
     postal_code = Column(String, nullable=False)
-    country = Column(String, default='México')
+    country = Column(String, default="México")
     phone = Column(String, nullable=True)
     is_default = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    # Relación inversa a usuario
     user = relationship("User", back_populates="addresses")
