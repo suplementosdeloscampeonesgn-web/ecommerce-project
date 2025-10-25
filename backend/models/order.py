@@ -7,7 +7,7 @@ from core.database import Base
 import enum
 
 
-# --- ENUM DE ESTADOS DE PEDIDO (MAYÚSCULAS PARA POSTGRES) ---
+# --- ENUM DE ESTADOS DE PEDIDO ---
 class OrderStatus(enum.Enum):
     PENDING = "PENDING"
     PAID = "PAID"
@@ -19,17 +19,20 @@ class OrderStatus(enum.Enum):
 
 # --- MODELO DE PEDIDOS (ORDERS) ---
 class Order(Base):
-    __tablename__ = "orders"
+    # ✅ CORREGIDO: Debe coincidir con tu tabla en NeonDB
+    __tablename__ = "Order" 
+    # (Si tu tabla se llama "Orders", pon "Orders" aquí)
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    # ✅ CORREGIDO: La FK debe apuntar a la tabla correcta
+    user_id = Column(Integer, ForeignKey("User.id"), nullable=False) 
     order_number = Column(String, unique=True, nullable=False)
     status = Column(Enum(OrderStatus), default=OrderStatus.PENDING, nullable=False)
     total_amount = Column(Float, nullable=False)
     shipping_address = Column(String, nullable=False)
-    shipping_type = Column(String(20))        # Tipo de envío (por ejemplo: Express o Estándar)
-    shipping_cost = Column(Float, default=0)  # Costo de envío
-    payment_method = Column(String, nullable=False)  # Tipo de pago (tarjeta, efectivo, etc.)
+    shipping_type = Column(String(20))
+    shipping_cost = Column(Float, default=0)
+    payment_method = Column(String, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -40,11 +43,15 @@ class Order(Base):
 
 # --- MODELO DE ITEMS DE PEDIDO (ORDER ITEMS) ---
 class OrderItem(Base):
-    __tablename__ = "order_items"
+    # ✅ CORREGIDO:
+    __tablename__ = "OrderItem" 
+    # (O "OrderItems", como se llame en NeonDB)
 
     id = Column(Integer, primary_key=True, index=True)
-    order_id = Column(Integer, ForeignKey("orders.id"), nullable=False)
-    product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
+    # ✅ CORREGIDO:
+    order_id = Column(Integer, ForeignKey("Order.id"), nullable=False) 
+    # ✅ CORREGIDO: (Asegúrate de que 'Product.py' también esté corregido)
+    product_id = Column(Integer, ForeignKey("Product.id"), nullable=False) 
     product_name = Column(String, nullable=False)
     product_price = Column(Float, nullable=False)
     quantity = Column(Integer, nullable=False)
@@ -57,11 +64,13 @@ class OrderItem(Base):
 
 # --- MODELO DE CUPONES (COUPONS) ---
 class Coupon(Base):
-    __tablename__ = "coupons"
+    # ✅ CORREGIDO:
+    __tablename__ = "Coupon" 
+    # (O "Coupons", como se llame en NeonDB)
 
     id = Column(Integer, primary_key=True, index=True)
     code = Column(String, unique=True, nullable=False)
-    discount_type = Column(String, nullable=False)   # "percentage" o "fixed"
+    discount_type = Column(String, nullable=False)
     discount_value = Column(Float, nullable=False)
     minimum_amount = Column(Float, default=0)
     max_uses = Column(Integer, nullable=True)

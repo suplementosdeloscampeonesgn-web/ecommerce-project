@@ -14,7 +14,9 @@ class AuthProvider(enum.Enum):
     EMAIL = "EMAIL"
 
 class User(Base):
-    __tablename__ = "users"
+    # ✅ CORREGIDO:
+    __tablename__ = "User" 
+    # (O "Users", como se llame en NeonDB)
 
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
@@ -31,10 +33,13 @@ class User(Base):
     addresses = relationship("Address", back_populates="user", cascade="all, delete")
 
 class Address(Base):
-    __tablename__ = "addresses"
+    # ✅ CORREGIDO:
+    __tablename__ = "Address" 
+    # (O "Addresses", como se llame en NeonDB)
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    # ✅ CORREGIDO:
+    user_id = Column(Integer, ForeignKey("User.id"), nullable=False) 
     name = Column(String, nullable=True)
     address_line = Column(String, nullable=False)
     city = Column(String, nullable=False)

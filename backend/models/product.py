@@ -1,8 +1,10 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, Text, TIMESTAMP, text
+from sqlalchemy import Column, Integer, String, Float, Boolean, Text, TIMESTAMP, text, ForeignKey
 from core.database import Base
 
 class Product(Base):
-    __tablename__ = "products"
+    # ✅ CORREGIDO: Debe coincidir con tu tabla en NeonDB
+    __tablename__ = "Product" 
+    # (O "Products", si así se llama. Debe ser exacto)
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=False)
@@ -11,9 +13,7 @@ class Product(Base):
     category = Column(String(100), index=True, nullable=False)
     price = Column(Float, nullable=False)
     
-    # --- CAMBIOS PRINCIPALES AQUÍ ---
-    # Almacenamos la URL de Firebase directamente en un campo de texto simple.
-    # Es más eficiente y mucho más fácil de manejar.
+    # Esta columna está bien definida
     image_url = Column(String(255), nullable=True) 
 
     sku = Column(String(100), nullable=False, unique=True)
@@ -22,7 +22,4 @@ class Product(Base):
     is_featured = Column(Boolean, default=False)
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text('now()'))
     
-    # Corregido para que se actualice automáticamente en cada modificación
     updated_at = Column(TIMESTAMP(timezone=True), onupdate=text('now()'))
-
-    # Se eliminaron los campos `compare_price` e `images` que no se usaban o fueron reemplazados.

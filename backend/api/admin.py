@@ -4,6 +4,7 @@ import cloudinary
 import cloudinary.uploader
 import pandas as pd
 import os
+import logging # ✅ 1. Importar logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from core.database import get_db
 from models.product import Product
@@ -12,6 +13,10 @@ from models.user import User
 from sqlalchemy import select, update, delete, func, extract, desc
 from jose import jwt
 from datetime import datetime, timedelta
+
+# Configurar un logger
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -41,7 +46,6 @@ def verify_admin_token(authorization: str = Header(...)):
         
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         
-        # Verifica si el token contiene los permisos de administrador
         is_admin_flag = payload.get("is_admin", False)
         role = payload.get("role", "")
         
@@ -50,6 +54,7 @@ def verify_admin_token(authorization: str = Header(...)):
             
         return payload
     except Exception as e:
+        logger.error(f"Error en la validación del token: {e}")
         raise HTTPException(
             status_code=401, 
             detail=f"No autorizado (admin): {str(e)}"
@@ -64,7 +69,7 @@ async def dashboard_metrics(db: AsyncSession = Depends(get_db), admin=Depends(ve
     try:
         now = datetime.utcnow()
         
-        # 1. Ingresos del mes (Pedidos completados o enviados)
+        logger.info("Iniciando consulta de dashboard: 1. Ingresos")
         ingresos_res = await db.execute(
             select(func.sum(Order.total_amount)).where(
                 extract("month", Order.created_at) == now.month,
@@ -74,7 +79,7 @@ async def dashboard_metrics(db: AsyncSession = Depends(get_db), admin=Depends(ve
         )
         ingresos = ingresos_res.scalar() or 0
         
-        # 2. Pedidos totales del mes
+        logger.info("Iniciando consulta de dashboard: 2. Pedidos del mes")
         pedidos_mes_res = await db.execute(
             select(func.count(Order.id)).where(
                 extract("month", Order.created_at) == now.month,
@@ -83,7 +88,7 @@ async def dashboard_metrics(db: AsyncSession = Depends(get_db), admin=Depends(ve
         )
         pedidos_mes = pedidos_mes_res.scalar() or 0
         
-        # 3. Clientes nuevos del mes
+        logger.info("Iniciando consulta de dashboard: 3. Clientes")
         clientes_res = await db.execute(
             select(func.count(User.id)).where(
                 extract("month", User.created_at) == now.month,
@@ -92,7 +97,7 @@ async def dashboard_metrics(db: AsyncSession = Depends(get_db), admin=Depends(ve
         )
         clientes_mes = clientes_res.scalar() or 0
 
-        # 4. Datos de ventas de los últimos 7 días
+        logger.info("Iniciando consulta de dashboard: 4. Ventas (7 días)")
         salesData = []
         for d in range(7, -1, -1): # Incluir hoy
             date = now - timedelta(days=d)
@@ -105,7 +110,7 @@ async def dashboard_metrics(db: AsyncSession = Depends(get_db), admin=Depends(ve
             ventas = ventas_res.scalar() or 0
             salesData.append({"name": date.strftime("%d %b"), "ventas": ventas})
 
-        # 5. Top 5 productos más vendidos
+        logger.info("Iniciando consulta de dashboard: 5. Top Productos")
         top_query = (
             select(OrderItem.product_id, Product.name, func.sum(OrderItem.quantity).label("sold"))
             .join(Product, Product.id == OrderItem.product_id)
@@ -119,7 +124,7 @@ async def dashboard_metrics(db: AsyncSession = Depends(get_db), admin=Depends(ve
             for r in top_result.fetchall()
         ]
 
-        # 6. Últimos 5 pedidos recientes
+        logger.info("Iniciando consulta de dashboard: 6. Pedidos Recientes")
         recent_query = (
             select(Order, User)
             .join(User, Order.user_id == User.id)
@@ -135,6 +140,7 @@ async def dashboard_metrics(db: AsyncSession = Depends(get_db), admin=Depends(ve
             "status": order.status.value if hasattr(order.status, "value") else order.status
         } for order, user in recent_result.fetchall()]
 
+        logger.info("Consultas de dashboard completadas con éxito.")
         return {
             "stats": [
                 {"title": "Ingresos (Mes)", "value": f"${ingresos:,.2f}"},
@@ -146,6 +152,9 @@ async def dashboard_metrics(db: AsyncSession = Depends(get_db), admin=Depends(ve
             "recentOrders": recentOrders
         }
     except Exception as e:
+        # ✅ ESTA ES LA LÍNEA MÁS IMPORTANTE
+        # Imprimirá el error completo en tus logs de Render
+        logger.exception(f"Error 500 al generar métricas del dashboard: {e}")
         raise HTTPException(status_code=500, detail=f"Error al generar métricas: {e}")
 
 # ---------------- PRODUCTOS ADMIN ----------------
@@ -156,7 +165,7 @@ async def get_products(db: AsyncSession = Depends(get_db), admin=Depends(verify_
     """
     result = await db.execute(select(Product).order_by(Product.created_at.desc()))
     products = result.scalars().all()
-    # Retorna la lista de productos
+    
     return [{
             "id": p.id, 
             "name": p.name, 
@@ -183,7 +192,8 @@ async def create_product(data: dict, db: AsyncSession = Depends(get_db), admin=D
         await db.refresh(new_product)
         return {"success": True, "product_id": new_product.id}
     except Exception as e:
-        await db.rollback()
+        await db.rollback() # ✅ Rollback en caso de error
+        logger.exception(f"Error 400 al crear producto: {e}")
         raise HTTPException(status_code=400, detail=f"Error al crear producto: {e}")
 
 @router.put("/products/{product_id}")
@@ -196,7 +206,8 @@ async def update_product(product_id: int, data: dict, db: AsyncSession = Depends
         await db.commit()
         return {"success": True}
     except Exception as e:
-        await db.rollback()
+        await db.rollback() # ✅ Rollback
+        logger.exception(f"Error 400 al actualizar producto: {e}")
         raise HTTPException(status_code=400, detail=f"Error al actualizar producto: {e}")
 
 @router.delete("/products/{product_id}")
@@ -209,7 +220,8 @@ async def delete_product(product_id: int, db: AsyncSession = Depends(get_db), ad
         await db.commit()
         return {"success": True}
     except Exception as e:
-        await db.rollback()
+        await db.rollback() # ✅ Rollback
+        logger.exception(f"Error 500 al eliminar producto: {e}")
         raise HTTPException(status_code=500, detail=f"Error al eliminar producto: {e}")
 
 # ---------------- PEDIDOS ADMIN ----------------
@@ -270,6 +282,7 @@ async def get_all_orders(
         return orders_list
         
     except Exception as e:
+        logger.exception(f"Error 500 al obtener pedidos: {e}")
         raise HTTPException(status_code=500, detail=f"Error al obtener pedidos: {str(e)}")
 
 @router.patch("/orders/{order_id}/status")
@@ -305,9 +318,10 @@ async def update_order_status(
         return {"success": True, "order_id": order_id, "new_status": status_upper}
         
     except Exception as e:
-        await db.rollback()
+        await db.rollback() # ✅ Rollback
         if isinstance(e, HTTPException):
             raise e
+        logger.exception(f"Error 500 al actualizar estado: {e}")
         raise HTTPException(status_code=500, detail=f"Error al actualizar estado: {str(e)}")
 
 
@@ -317,8 +331,8 @@ async def upload_images(file: UploadFile = File(...), admin=Depends(verify_admin
     """
     Sube una imagen de producto a Cloudinary.
     """
+    temp_path = f"/tmp/{file.filename}"
     try:
-        temp_path = f"/tmp/{file.filename}"
         with open(temp_path, "wb") as f:
             f.write(await file.read())
             
@@ -330,12 +344,13 @@ async def upload_images(file: UploadFile = File(...), admin=Depends(verify_admin
                 {"quality": "auto"}
             ],
         )
-        os.remove(temp_path)
         return {"urls": [result["secure_url"]]}
     except Exception as e:
-        if os.path.exists(temp_path):
-             os.remove(temp_path)
+        logger.exception(f"Error 500 al subir imagen: {e}")
         raise HTTPException(status_code=500, detail=f"Error al subir imagen: {str(e)}")
+    finally:
+        if os.path.exists(temp_path):
+             os.remove(temp_path) # ✅ Asegura que el archivo temporal se borre
 
 @router.post("/import-excel")
 async def import_excel(excel: UploadFile = File(...), db: AsyncSession = Depends(get_db), admin=Depends(verify_admin_token)):
@@ -371,5 +386,6 @@ async def import_excel(excel: UploadFile = File(...), db: AsyncSession = Depends
         await db.commit()
         return {"success": True, "imported": imported_count, "updated": updated_count}
     except Exception as e:
-        await db.rollback()
+        await db.rollback() # ✅ Rollback
+        logger.exception(f"Error 500 al importar Excel: {e}")
         raise HTTPException(status_code=500, detail=f"Error al importar Excel: {e}")
