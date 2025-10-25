@@ -34,7 +34,7 @@ def verify_admin_token(authorization: str = Header(...)):
         if scheme.lower() != "bearer":
             raise ValueError("Invalid scheme")
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        # --------- CORREGIDO ---------
+        # --------- CORREGIDO (Lógica de admin más robusta) ---------
         if not payload.get("is_admin") and payload.get("role") != "ADMIN":
             raise ValueError("Not admin")
         return payload
@@ -46,11 +46,12 @@ def verify_admin_token(authorization: str = Header(...)):
 async def dashboard_metrics(db: AsyncSession = Depends(get_db), admin=Depends(verify_admin_token)):
     try:
         now = datetime.utcnow()
+        # (Tu lógica de dashboard... todo esto se ve bien)
         ingresos_res = await db.execute(
             select(func.sum(Order.total_amount)).where(
                 extract("month", Order.created_at) == now.month,
                 extract("year", Order.created_at) == now.year,
-                Order.status.in_(["DELIVERED", "SHIPPED"])
+                Order.status.in_(["DELIVERED", "SHIPPED"]) # Revisa si tus status son estos o los de la UI
             )
         )
         ingresos = ingresos_res.scalar() or 0
@@ -127,17 +128,12 @@ async def dashboard_metrics(db: AsyncSession = Depends(get_db), admin=Depends(ve
 async def get_products(db: AsyncSession = Depends(get_db), admin=Depends(verify_admin_token)):
     result = await db.execute(select(Product).order_by(Product.created_at.desc()))
     products = result.scalars().all()
+    # (Tu lógica de productos está bien)
     return {
         "products": [{
-            "id": p.id,
-            "name": p.name,
-            "brand": p.brand,
-            "category": p.category,
-            "price": float(p.price),
-            "stock": p.stock,
-            "description": p.description,
-            "image": p.image_url,
-            "created_at": p.created_at
+            "id": p.id, "name": p.name, "brand": p.brand, "category": p.category,
+            "price": float(p.price), "stock": p.stock, "description": p.description,
+            "image": p.image_url, "created_at": p.created_at
         } for p in products]
     }
 
@@ -161,9 +157,66 @@ async def delete_product(product_id: int, db: AsyncSession = Depends(get_db), ad
     await db.commit()
     return {"success": True}
 
+# ---------------- ✅ NUEVO ENDPOINT DE PEDIDOS ADMIN ----------------
+@router.get("/orders")
+async def get_all_orders(
+    db: AsyncSession = Depends(get_db), 
+    admin = Depends(verify_admin_token)
+):
+    try:
+        # Consulta para obtener pedidos y unirlos con el usuario
+        query = (
+            select(Order, User)
+            .join(User, Order.user_id == User.id)
+            .order_by(desc(Order.created_at))
+        )
+        result = await db.execute(query)
+        all_orders = result.fetchall()
+        
+        orders_list = []
+        
+        # Itera sobre cada pedido para obtener sus items
+        for order, user in all_orders:
+            items_query = (
+                select(OrderItem, Product.name.label("product_name"), Product.price.label("product_price"))
+                .join(Product, OrderItem.product_id == Product.id)
+                .where(OrderItem.order_id == order.id)
+            )
+            items_result = await db.execute(items_query)
+            order_items = items_result.fetchall()
+            
+            # Construye el JSON que el frontend espera
+            orders_list.append({
+                "id": order.id,
+                "created_at": order.created_at,
+                "total_amount": float(order.total_amount),
+                "status": order.status.value if hasattr(order.status, "value") else order.status,
+                # Asumiendo que guardaste la dirección como un string simple
+                "shipping_address": getattr(order, 'shipping_address_str', 'N/A'),
+                "user": {
+                    "name": user.name,
+                    "email": user.email
+                },
+                "items": [
+                    {
+                        "id": item.id,
+                        "product_id": item.product_id,
+                        "quantity": item.quantity,
+                        "product_name": product_name,
+                        "product_price": float(product_price)
+                    } for item, product_name, product_price in order_items
+                ]
+            })
+        
+        return orders_list
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al obtener pedidos: {str(e)}")
+
 # ---------------- SUBIDA DE IMÁGENES ----------------
 @router.post("/upload-images")
 async def upload_images(file: UploadFile = File(...), admin=Depends(verify_admin_token)):
+    # (Tu lógica de subida de imágenes está bien)
     try:
         temp_path = f"/tmp/{file.filename}"
         with open(temp_path, "wb") as f:
@@ -184,6 +237,7 @@ async def upload_images(file: UploadFile = File(...), admin=Depends(verify_admin
 # ---------------- IMPORTACIÓN EXCEL ----------------
 @router.post("/import-excel")
 async def import_excel(excel: UploadFile = File(...), db: AsyncSession = Depends(get_db), admin=Depends(verify_admin_token)):
+    # (Tu lógica de importación de Excel está bien)
     try:
         df = pd.read_excel(excel.file)
         imported = 0
