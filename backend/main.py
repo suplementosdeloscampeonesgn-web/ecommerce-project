@@ -26,6 +26,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # --- CONFIGURACIÓN DE CORS ---
 origins = [
     "https://www.suplementosdeloscampeonesgn.shop",
+    "https://suplementosdeloscampeonesgn.shop",
     "http://localhost:5173",
 ]
 
