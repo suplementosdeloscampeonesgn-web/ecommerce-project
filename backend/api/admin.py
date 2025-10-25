@@ -4,11 +4,11 @@ import cloudinary
 import cloudinary.uploader
 import pandas as pd
 import os
-import logging # ✅ 1. Importar logging
+import logging # Importar logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from core.database import get_db
 from models.product import Product
-from models.order import Order, OrderItem
+from models.order import Order, OrderItem, OrderStatus # ✅ 1. Importa el Enum
 from models.user import User
 from sqlalchemy import select, update, delete, func, extract, desc
 from jose import jwt
@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # ---------------- CONFIG CLOUDINARY ----------------
+# (Tu config de Cloudinary está bien)
 CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME")
 CLOUDINARY_API_KEY = os.getenv("CLOUDINARY_API_KEY")
 CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET")
@@ -69,12 +70,15 @@ async def dashboard_metrics(db: AsyncSession = Depends(get_db), admin=Depends(ve
     try:
         now = datetime.utcnow()
         
+        # ✅ 2. CORREGIDO: Usar los valores del Enum
+        valid_income_statuses = [OrderStatus.DELIVERED, OrderStatus.SHIPPED]
+        
         logger.info("Iniciando consulta de dashboard: 1. Ingresos")
         ingresos_res = await db.execute(
             select(func.sum(Order.total_amount)).where(
                 extract("month", Order.created_at) == now.month,
                 extract("year", Order.created_at) == now.year,
-                Order.status.in_(["COMPLETADO", "ENVIADO"])
+                Order.status.in_(valid_income_statuses) # ✅ Usar la variable
             )
         )
         ingresos = ingresos_res.scalar() or 0
@@ -104,7 +108,7 @@ async def dashboard_metrics(db: AsyncSession = Depends(get_db), admin=Depends(ve
             ventas_res = await db.execute(
                 select(func.sum(Order.total_amount)).where(
                     func.date(Order.created_at) == date.date(),
-                    Order.status.in_(["COMPLETADO", "ENVIADO"])
+                    Order.status.in_(valid_income_statuses) # ✅ Usar la variable
                 )
             )
             ventas = ventas_res.scalar() or 0
@@ -152,8 +156,6 @@ async def dashboard_metrics(db: AsyncSession = Depends(get_db), admin=Depends(ve
             "recentOrders": recentOrders
         }
     except Exception as e:
-        # ✅ ESTA ES LA LÍNEA MÁS IMPORTANTE
-        # Imprimirá el error completo en tus logs de Render
         logger.exception(f"Error 500 al generar métricas del dashboard: {e}")
         raise HTTPException(status_code=500, detail=f"Error al generar métricas: {e}")
 
@@ -175,8 +177,7 @@ async def get_products(db: AsyncSession = Depends(get_db), admin=Depends(verify_
             "stock": p.stock, 
             "description": p.description,
             "created_at": p.created_at,
-            # ✅ CORREGIDO: "imageUrl" para coincidir con el frontend
-            "imageUrl": p.image_url 
+            "imageUrl": p.image_url # (Esto ya estaba bien)
         } for p in products]
 
 @router.post("/products")
@@ -192,7 +193,7 @@ async def create_product(data: dict, db: AsyncSession = Depends(get_db), admin=D
         await db.refresh(new_product)
         return {"success": True, "product_id": new_product.id}
     except Exception as e:
-        await db.rollback() # ✅ Rollback en caso de error
+        await db.rollback()
         logger.exception(f"Error 400 al crear producto: {e}")
         raise HTTPException(status_code=400, detail=f"Error al crear producto: {e}")
 
@@ -206,7 +207,7 @@ async def update_product(product_id: int, data: dict, db: AsyncSession = Depends
         await db.commit()
         return {"success": True}
     except Exception as e:
-        await db.rollback() # ✅ Rollback
+        await db.rollback()
         logger.exception(f"Error 400 al actualizar producto: {e}")
         raise HTTPException(status_code=400, detail=f"Error al actualizar producto: {e}")
 
@@ -220,7 +221,7 @@ async def delete_product(product_id: int, db: AsyncSession = Depends(get_db), ad
         await db.commit()
         return {"success": True}
     except Exception as e:
-        await db.rollback() # ✅ Rollback
+        await db.rollback()
         logger.exception(f"Error 500 al eliminar producto: {e}")
         raise HTTPException(status_code=500, detail=f"Error al eliminar producto: {e}")
 
@@ -296,7 +297,8 @@ async def update_order_status(
     Actualiza el estado de un pedido específico.
     """
     try:
-        valid_statuses = {'PENDING', 'PROCESANDO', 'ENVIADO', 'COMPLETADO', 'CANCELADO'}
+        # ✅ 3. CORREGIDO: Usar los Enums reales
+        valid_statuses = {s.value for s in OrderStatus}
         status_upper = request.status.upper()
         
         if status_upper not in valid_statuses:
@@ -318,7 +320,7 @@ async def update_order_status(
         return {"success": True, "order_id": order_id, "new_status": status_upper}
         
     except Exception as e:
-        await db.rollback() # ✅ Rollback
+        await db.rollback()
         if isinstance(e, HTTPException):
             raise e
         logger.exception(f"Error 500 al actualizar estado: {e}")
@@ -350,7 +352,7 @@ async def upload_images(file: UploadFile = File(...), admin=Depends(verify_admin
         raise HTTPException(status_code=500, detail=f"Error al subir imagen: {str(e)}")
     finally:
         if os.path.exists(temp_path):
-             os.remove(temp_path) # ✅ Asegura que el archivo temporal se borre
+             os.remove(temp_path)
 
 @router.post("/import-excel")
 async def import_excel(excel: UploadFile = File(...), db: AsyncSession = Depends(get_db), admin=Depends(verify_admin_token)):
@@ -386,6 +388,6 @@ async def import_excel(excel: UploadFile = File(...), db: AsyncSession = Depends
         await db.commit()
         return {"success": True, "imported": imported_count, "updated": updated_count}
     except Exception as e:
-        await db.rollback() # ✅ Rollback
+        await db.rollback()
         logger.exception(f"Error 500 al importar Excel: {e}")
         raise HTTPException(status_code=500, detail=f"Error al importar Excel: {e}")
