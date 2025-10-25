@@ -1,4 +1,5 @@
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Header
+from pydantic import BaseModel
 import cloudinary
 import cloudinary.uploader
 import pandas as pd
@@ -29,32 +30,51 @@ cloudinary.config(
 
 # ---------------- VALIDACIÓN ADMIN ----------------
 def verify_admin_token(authorization: str = Header(...)):
+    """
+    Dependencia de FastAPI para verificar el token JWT de un administrador.
+    Lee el header 'Authorization' y valida el rol.
+    """
     try:
         scheme, token = authorization.split()
         if scheme.lower() != "bearer":
-            raise ValueError("Invalid scheme")
+            raise ValueError("Esquema de autorización no válido")
+        
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        # --------- CORREGIDO (Lógica de admin más robusta) ---------
-        if not payload.get("is_admin") and payload.get("role") != "ADMIN":
-            raise ValueError("Not admin")
+        
+        # Verifica si el token contiene los permisos de administrador
+        is_admin_flag = payload.get("is_admin", False)
+        role = payload.get("role", "")
+        
+        if not is_admin_flag and role.upper() != "ADMIN":
+            raise ValueError("No es administrador")
+            
         return payload
-    except Exception:
-        raise HTTPException(status_code=401, detail="No autorizado (admin)")
+    except Exception as e:
+        raise HTTPException(
+            status_code=401, 
+            detail=f"No autorizado (admin): {str(e)}"
+        )
 
 # ---------------- DASHBOARD ADMIN ----------------
 @router.get("/dashboard")
 async def dashboard_metrics(db: AsyncSession = Depends(get_db), admin=Depends(verify_admin_token)):
+    """
+    Obtiene las métricas clave para el dashboard del administrador.
+    """
     try:
         now = datetime.utcnow()
-        # (Tu lógica de dashboard... todo esto se ve bien)
+        
+        # 1. Ingresos del mes (Pedidos completados o enviados)
         ingresos_res = await db.execute(
             select(func.sum(Order.total_amount)).where(
                 extract("month", Order.created_at) == now.month,
                 extract("year", Order.created_at) == now.year,
-                Order.status.in_(["DELIVERED", "SHIPPED"]) # Revisa si tus status son estos o los de la UI
+                Order.status.in_(["COMPLETADO", "ENVIADO"])
             )
         )
         ingresos = ingresos_res.scalar() or 0
+        
+        # 2. Pedidos totales del mes
         pedidos_mes_res = await db.execute(
             select(func.count(Order.id)).where(
                 extract("month", Order.created_at) == now.month,
@@ -62,6 +82,8 @@ async def dashboard_metrics(db: AsyncSession = Depends(get_db), admin=Depends(ve
             )
         )
         pedidos_mes = pedidos_mes_res.scalar() or 0
+        
+        # 3. Clientes nuevos del mes
         clientes_res = await db.execute(
             select(func.count(User.id)).where(
                 extract("month", User.created_at) == now.month,
@@ -70,18 +92,20 @@ async def dashboard_metrics(db: AsyncSession = Depends(get_db), admin=Depends(ve
         )
         clientes_mes = clientes_res.scalar() or 0
 
+        # 4. Datos de ventas de los últimos 7 días
         salesData = []
-        for d in range(7, 0, -1):
+        for d in range(7, -1, -1): # Incluir hoy
             date = now - timedelta(days=d)
             ventas_res = await db.execute(
                 select(func.sum(Order.total_amount)).where(
                     func.date(Order.created_at) == date.date(),
-                    Order.status.in_(["DELIVERED", "SHIPPED"])
+                    Order.status.in_(["COMPLETADO", "ENVIADO"])
                 )
             )
             ventas = ventas_res.scalar() or 0
             salesData.append({"name": date.strftime("%d %b"), "ventas": ventas})
 
+        # 5. Top 5 productos más vendidos
         top_query = (
             select(OrderItem.product_id, Product.name, func.sum(OrderItem.quantity).label("sold"))
             .join(Product, Product.id == OrderItem.product_id)
@@ -95,6 +119,7 @@ async def dashboard_metrics(db: AsyncSession = Depends(get_db), admin=Depends(ve
             for r in top_result.fetchall()
         ]
 
+        # 6. Últimos 5 pedidos recientes
         recent_query = (
             select(Order, User)
             .join(User, Order.user_id == User.id)
@@ -126,45 +151,82 @@ async def dashboard_metrics(db: AsyncSession = Depends(get_db), admin=Depends(ve
 # ---------------- PRODUCTOS ADMIN ----------------
 @router.get("/products")
 async def get_products(db: AsyncSession = Depends(get_db), admin=Depends(verify_admin_token)):
+    """
+    Obtiene la lista de todos los productos para el panel de admin.
+    """
     result = await db.execute(select(Product).order_by(Product.created_at.desc()))
     products = result.scalars().all()
-    # (Tu lógica de productos está bien)
-    return {
-        "products": [{
-            "id": p.id, "name": p.name, "brand": p.brand, "category": p.category,
-            "price": float(p.price), "stock": p.stock, "description": p.description,
-            "image": p.image_url, "created_at": p.created_at
+    # Retorna la lista de productos
+    return [{
+            "id": p.id, 
+            "name": p.name, 
+            "brand": p.brand, 
+            "category": p.category,
+            "price": float(p.price), 
+            "stock": p.stock, 
+            "description": p.description,
+            "created_at": p.created_at,
+            # ✅ CORREGIDO: "imageUrl" para coincidir con el frontend
+            "imageUrl": p.image_url 
         } for p in products]
-    }
 
 @router.post("/products")
 async def create_product(data: dict, db: AsyncSession = Depends(get_db), admin=Depends(verify_admin_token)):
-    new_product = Product(**data)
-    db.add(new_product)
-    await db.commit()
-    await db.refresh(new_product)
-    return {"success": True, "product_id": new_product.id}
+    """
+    Crea un nuevo producto en la base de datos.
+    El frontend debe enviar 'image_url' en el 'data'.
+    """
+    try:
+        new_product = Product(**data)
+        db.add(new_product)
+        await db.commit()
+        await db.refresh(new_product)
+        return {"success": True, "product_id": new_product.id}
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail=f"Error al crear producto: {e}")
 
 @router.put("/products/{product_id}")
 async def update_product(product_id: int, data: dict, db: AsyncSession = Depends(get_db), admin=Depends(verify_admin_token)):
-    await db.execute(update(Product).where(Product.id == product_id).values(**data))
-    await db.commit()
-    return {"success": True}
+    """
+    Actualiza un producto existente por su ID.
+    """
+    try:
+        await db.execute(update(Product).where(Product.id == product_id).values(**data))
+        await db.commit()
+        return {"success": True}
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail=f"Error al actualizar producto: {e}")
 
 @router.delete("/products/{product_id}")
 async def delete_product(product_id: int, db: AsyncSession = Depends(get_db), admin=Depends(verify_admin_token)):
-    await db.execute(delete(Product).where(Product.id == product_id))
-    await db.commit()
-    return {"success": True}
+    """
+    Elimina un producto por su ID.
+    """
+    try:
+        await db.execute(delete(Product).where(Product.id == product_id))
+        await db.commit()
+        return {"success": True}
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al eliminar producto: {e}")
 
-# ---------------- ✅ NUEVO ENDPOINT DE PEDIDOS ADMIN ----------------
+# ---------------- PEDIDOS ADMIN ----------------
+
+class StatusUpdateRequest(BaseModel):
+    """Schema para validar el body del request de actualización de estado."""
+    status: str
+
 @router.get("/orders")
 async def get_all_orders(
     db: AsyncSession = Depends(get_db), 
     admin = Depends(verify_admin_token)
 ):
+    """
+    Obtiene todos los pedidos con detalles de usuario e items para el panel de admin.
+    """
     try:
-        # Consulta para obtener pedidos y unirlos con el usuario
         query = (
             select(Order, User)
             .join(User, Order.user_id == User.id)
@@ -175,7 +237,6 @@ async def get_all_orders(
         
         orders_list = []
         
-        # Itera sobre cada pedido para obtener sus items
         for order, user in all_orders:
             items_query = (
                 select(OrderItem, Product.name.label("product_name"), Product.price.label("product_price"))
@@ -185,13 +246,11 @@ async def get_all_orders(
             items_result = await db.execute(items_query)
             order_items = items_result.fetchall()
             
-            # Construye el JSON que el frontend espera
             orders_list.append({
                 "id": order.id,
                 "created_at": order.created_at,
                 "total_amount": float(order.total_amount),
                 "status": order.status.value if hasattr(order.status, "value") else order.status,
-                # Asumiendo que guardaste la dirección como un string simple
                 "shipping_address": getattr(order, 'shipping_address_str', 'N/A'),
                 "user": {
                     "name": user.name,
@@ -213,14 +272,56 @@ async def get_all_orders(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener pedidos: {str(e)}")
 
-# ---------------- SUBIDA DE IMÁGENES ----------------
+@router.patch("/orders/{order_id}/status")
+async def update_order_status(
+    order_id: int, 
+    request: StatusUpdateRequest, 
+    db: AsyncSession = Depends(get_db), 
+    admin = Depends(verify_admin_token)
+):
+    """
+    Actualiza el estado de un pedido específico.
+    """
+    try:
+        valid_statuses = {'PENDING', 'PROCESANDO', 'ENVIADO', 'COMPLETADO', 'CANCELADO'}
+        status_upper = request.status.upper()
+        
+        if status_upper not in valid_statuses:
+            raise HTTPException(status_code=400, detail=f"Estado no válido: {request.status}")
+
+        order_res = await db.execute(select(Order).where(Order.id == order_id))
+        order = order_res.scalar_one_or_none()
+        
+        if not order:
+            raise HTTPException(status_code=404, detail="Pedido no encontrado")
+
+        await db.execute(
+            update(Order)
+            .where(Order.id == order_id)
+            .values(status=status_upper)
+        )
+        await db.commit()
+        
+        return {"success": True, "order_id": order_id, "new_status": status_upper}
+        
+    except Exception as e:
+        await db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=f"Error al actualizar estado: {str(e)}")
+
+
+# ---------------- UTILIDADES ADMIN (IMÁGENES & EXCEL) ----------------
 @router.post("/upload-images")
 async def upload_images(file: UploadFile = File(...), admin=Depends(verify_admin_token)):
-    # (Tu lógica de subida de imágenes está bien)
+    """
+    Sube una imagen de producto a Cloudinary.
+    """
     try:
         temp_path = f"/tmp/{file.filename}"
         with open(temp_path, "wb") as f:
             f.write(await file.read())
+            
         result = cloudinary.uploader.upload(
             temp_path,
             folder="campeones-gn/products",
@@ -232,15 +333,19 @@ async def upload_images(file: UploadFile = File(...), admin=Depends(verify_admin
         os.remove(temp_path)
         return {"urls": [result["secure_url"]]}
     except Exception as e:
+        if os.path.exists(temp_path):
+             os.remove(temp_path)
         raise HTTPException(status_code=500, detail=f"Error al subir imagen: {str(e)}")
 
-# ---------------- IMPORTACIÓN EXCEL ----------------
 @router.post("/import-excel")
 async def import_excel(excel: UploadFile = File(...), db: AsyncSession = Depends(get_db), admin=Depends(verify_admin_token)):
-    # (Tu lógica de importación de Excel está bien)
+    """
+    Importa o actualiza productos masivamente desde un archivo Excel.
+    """
     try:
         df = pd.read_excel(excel.file)
-        imported = 0
+        imported_count = 0
+        updated_count = 0
 
         for _, row in df.iterrows():
             data = dict(
@@ -251,17 +356,20 @@ async def import_excel(excel: UploadFile = File(...), db: AsyncSession = Depends
                 stock=int(row.get("Stock", 0)),
                 description=row.get("Descripcion", "")
             )
+            
             existing = await db.execute(select(Product).where(Product.name == data["name"], Product.brand == data["brand"]))
             product = existing.scalar_one_or_none()
 
             if product:
                 await db.execute(update(Product).where(Product.id == product.id).values(**data))
+                updated_count += 1
             else:
                 new_product = Product(**data)
                 db.add(new_product)
-            imported += 1
+                imported_count += 1
 
         await db.commit()
-        return {"success": True, "imported": imported}
+        return {"success": True, "imported": imported_count, "updated": updated_count}
     except Exception as e:
+        await db.rollback()
         raise HTTPException(status_code=500, detail=f"Error al importar Excel: {e}")
