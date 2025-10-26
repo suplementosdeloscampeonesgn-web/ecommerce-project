@@ -18,7 +18,7 @@ router = APIRouter(
 async def get_all_products(db: AsyncSession = Depends(get_db)):
     """Obtiene todos los productos activos, ordenados por nombre."""
     try:
-        query = select(ProductModel).where(ProductModel.is_active == True).order_by(ProductModel.name)
+        query = select(ProductModel).order_by(ProductModel.name)
         result = await db.execute(query) 
         products = result.scalars().all()
         print("### DEBUG FastAPI: productos encontrados =", len(products))  # <<-- DEPURACIÓN
