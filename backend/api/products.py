@@ -17,7 +17,6 @@ from core.database import get_db
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
-    prefix="/api/products", 
     tags=["Products"]
 )
 
