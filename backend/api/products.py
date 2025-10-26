@@ -1,89 +1,149 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from sqlalchemy import select
+# ✅ Importar AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession 
+from sqlalchemy import select, delete 
 import uuid
+import logging # ✅ Añadir logging para errores
 
-# --- CAMBIO: Importa los schemas específicos para cada operación ---
+# Importar schemas y modelo
 from models.product import Product as ProductModel 
 from schemas.product import ProductCreate, ProductUpdate, Product as ProductSchema
-from core.database import get_db
+# Asegúrate que get_db devuelve AsyncSession
+from core.database import get_db 
+# (Opcional) Si mueves POST/PUT/DELETE, necesitarás esto
+# from .admin import verify_admin_token 
+
+# Configurar logger
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
+    prefix="/api/products", 
     tags=["Products"]
 )
 
 @router.get("/", response_model=list[ProductSchema])
-async def get_all_products(db: Session = Depends(get_db)):
-    query = select(ProductModel)
-    result = await db.execute(query)
-    products = result.scalars().all()
-    return products
+async def get_all_products(db: AsyncSession = Depends(get_db)):
+    """Obtiene todos los productos activos, ordenados por nombre."""
+    try:
+        query = select(ProductModel).where(ProductModel.is_active == True).order_by(ProductModel.name)
+        result = await db.execute(query) 
+        products = result.scalars().all()
+        return products
+    except Exception as e:
+        logger.exception(f"Error al obtener todos los productos: {e}")
+        raise HTTPException(status_code=500, detail="Error interno al obtener productos")
 
 @router.get("/{product_id}", response_model=ProductSchema)
-async def get_product_by_id(product_id: int, db: Session = Depends(get_db)):
-    result = await db.execute(select(ProductModel).where(ProductModel.id == product_id))
-    product = result.scalar_one_or_none()
-    if product is None:
-        raise HTTPException(status_code=404, detail="Producto no encontrado")
-    return product
+async def get_product_by_id(product_id: int, db: AsyncSession = Depends(get_db)):
+    """Obtiene un producto específico por su ID."""
+    try:
+        result = await db.execute(select(ProductModel).where(ProductModel.id == product_id)) 
+        product = result.scalar_one_or_none()
+        if product is None:
+            raise HTTPException(status_code=404, detail="Producto no encontrado")
+        return product
+    except HTTPException:
+        raise # Re-lanzar HTTPException para que FastAPI la maneje
+    except Exception as e:
+        logger.exception(f"Error al obtener el producto {product_id}: {e}")
+        raise HTTPException(status_code=500, detail="Error interno al obtener el producto")
 
-@router.post("/", response_model=ProductSchema, status_code=201)
+
+# --- ¡ADVERTENCIA DE SEGURIDAD! ---
+# Estos endpoints permiten a CUALQUIERA crear, modificar o borrar productos.
+# Deberían moverse a 'admin.py' y protegerse con 'verify_admin_token'.
+# Si los dejas aquí, añade 'dependencies=[Depends(verify_admin_token)]' a cada uno.
+
+@router.post("/", response_model=ProductSchema, status_code=201, 
+            # dependencies=[Depends(verify_admin_token)], # <-- DESCOMENTA SI LO DEJAS AQUÍ
+            summary="Crea un nuevo producto (¡Proteger!)") 
 async def create_product(
-    product: ProductCreate, # <-- CAMBIO: Usa el schema ProductCreate para la entrada
-    db: Session = Depends(get_db)
+    product: ProductCreate, 
+    db: AsyncSession = Depends(get_db)
 ):
-    slug = product.name.lower().replace(" ", "-") + f"-{uuid.uuid4().hex[:6]}"
-    sku = f"SKU-{uuid.uuid4().hex[:8].upper()}"
+    """
+    Crea un nuevo producto. 
+    ADVERTENCIA: Endpoint no protegido por defecto.
+    """
+    try:
+        slug = product.name.lower().replace(" ", "-") + f"-{uuid.uuid4().hex[:6]}"
+        sku = f"SKU-{uuid.uuid4().hex[:8].upper()}"
 
-    db_product = ProductModel(
-        name=product.name,
-        slug=slug,
-        description=product.description,
-        price=product.price,
-        sku=sku,
-        stock=product.stock,
-        category=product.category,
-        # --- CAMBIO: Lógica de imagen simplificada ---
-        # Usa el campo 'image_url' del schema y lo asigna al campo del modelo
-        image_url=product.image_url,
-        is_active=True,
-        is_featured=False
-    )
-    db.add(db_product)
-    await db.commit()
-    await db.refresh(db_product)
-    return db_product
+        db_product = ProductModel(
+            name=product.name,
+            slug=slug,
+            description=product.description,
+            price=product.price,
+            sku=sku,
+            stock=product.stock,
+            category=product.category,
+            image_url=product.image_url, # Usa image_url consistentemente
+            is_active=True,
+            is_featured=False
+        )
+        db.add(db_product)
+        await db.commit() 
+        await db.refresh(db_product) 
+        return db_product
+    except Exception as e:
+        await db.rollback()
+        logger.exception(f"Error al crear producto: {e}")
+        raise HTTPException(status_code=400, detail=f"Error al crear producto: {e}")
 
-@router.put("/{product_id}", response_model=ProductSchema)
+
+@router.put("/{product_id}", response_model=ProductSchema,
+            # dependencies=[Depends(verify_admin_token)], # <-- DESCOMENTA SI LO DEJAS AQUÍ
+            summary="Actualiza un producto (¡Proteger!)")
 async def update_product(
     product_id: int,
-    product_data: ProductUpdate, # <-- CAMBIO: Usa el schema ProductUpdate para la entrada
-    db: Session = Depends(get_db)
+    product_data: ProductUpdate, 
+    db: AsyncSession = Depends(get_db)
 ):
-    result = await db.execute(select(ProductModel).where(ProductModel.id == product_id))
-    db_product = result.scalar_one_or_none()
-    if not db_product:
-        raise HTTPException(status_code=404, detail="Producto no encontrado")
+    """
+    Actualiza un producto existente.
+    ADVERTENCIA: Endpoint no protegido por defecto.
+    """
+    try:
+        result = await db.execute(select(ProductModel).where(ProductModel.id == product_id)) 
+        db_product = result.scalar_one_or_none()
+        if not db_product:
+            raise HTTPException(status_code=404, detail="Producto no encontrado")
 
-    # --- CAMBIO: Lógica de actualización mejorada y dinámica ---
-    # Convierte el schema de Pydantic a un diccionario, excluyendo los campos que no se enviaron
-    update_data = product_data.dict(exclude_unset=True)
+        update_data = product_data.dict(exclude_unset=True)
+        for key, value in update_data.items():
+            setattr(db_product, key, value)
 
-    # Itera sobre los datos enviados y actualiza el modelo de la base de datos
-    for key, value in update_data.items():
-        setattr(db_product, key, value)
+        await db.commit() 
+        await db.refresh(db_product) 
+        return db_product
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        logger.exception(f"Error al actualizar producto {product_id}: {e}")
+        raise HTTPException(status_code=400, detail=f"Error al actualizar producto: {e}")
 
-    await db.commit()
-    await db.refresh(db_product)
-    return db_product
 
-@router.delete("/{product_id}", status_code=204)
-async def delete_product(product_id: int, db: Session = Depends(get_db)):
-    result = await db.execute(select(ProductModel).where(ProductModel.id == product_id))
-    db_product = result.scalar_one_or_none()
-    if not db_product:
-        raise HTTPException(status_code=404, detail="Producto no encontrado")
-    
-    await db.delete(db_product)
-    await db.commit()
-    return {"message": "Producto eliminado con éxito"} # Aunque el status 204 no devuelve cuerpo, es útil para pruebas
+@router.delete("/{product_id}", status_code=204,
+              # dependencies=[Depends(verify_admin_token)], # <-- DESCOMENTA SI LO DEJAS AQUÍ
+              summary="Elimina un producto (¡Proteger!)")
+async def delete_product(product_id: int, db: AsyncSession = Depends(get_db)): 
+    """
+    Elimina un producto.
+    ADVERTENCIA: Endpoint no protegido por defecto.
+    """
+    try:
+        result = await db.execute(select(ProductModel).where(ProductModel.id == product_id)) 
+        db_product = result.scalar_one_or_none()
+        if not db_product:
+            raise HTTPException(status_code=404, detail="Producto no encontrado")
+        
+        await db.delete(db_product) 
+        await db.commit() 
+        # No se devuelve cuerpo con 204
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        logger.exception(f"Error al eliminar producto {product_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error al eliminar producto: {e}")
