@@ -1,10 +1,12 @@
+# backend/models/user.py
+
 from sqlalchemy import Column, Integer, String, Boolean, Enum, DateTime, ForeignKey
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from core.database import Base
 import enum
 
-# ---- Enum en MAYÚSCULAS ----
+# ---- Enums (Esto estaba bien) ----
 class UserRole(enum.Enum):
     USER = "USER"
     ADMIN = "ADMIN"
@@ -13,10 +15,10 @@ class AuthProvider(enum.Enum):
     GOOGLE = "GOOGLE"
     EMAIL = "EMAIL"
 
+# --- MODELO DE USUARIO ---
 class User(Base):
-    # ✅ CORREGIDO:
-    __tablename__ = "User" 
-    # (O "Users", como se llame en NeonDB)
+    # ✅ CORREGIDO: plural y minúscula
+    __tablename__ = "users" 
 
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
@@ -29,17 +31,20 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
+    # Relaciones (Esto estaba bien)
     orders = relationship("Order", back_populates="user")
     addresses = relationship("Address", back_populates="user", cascade="all, delete")
 
+# --- MODELO DE DIRECCIÓN ---
 class Address(Base):
-    # ✅ CORREGIDO:
-    __tablename__ = "Address" 
-    # (O "Addresses", como se llame en NeonDB)
+    # ✅ CORREGIDO: plural y minúscula
+    __tablename__ = "addresses" 
 
     id = Column(Integer, primary_key=True, index=True)
-    # ✅ CORREGIDO:
-    user_id = Column(Integer, ForeignKey("User.id"), nullable=False) 
+    
+    # ✅ CORREGIDO: Apunta a "users.id" (plural y minúscula)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False) 
+    
     name = Column(String, nullable=True)
     address_line = Column(String, nullable=False)
     city = Column(String, nullable=False)
@@ -50,4 +55,5 @@ class Address(Base):
     is_default = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
+    # Relación (Esto estaba bien)
     user = relationship("User", back_populates="addresses")
