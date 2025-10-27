@@ -7,6 +7,7 @@ class Product(Base):
     # (O "Products", si así se llama. Debe ser exacto)
 
     id = Column(Integer, primary_key=True, index=True)
+    brand = Column(String(100), nullable=True)
     name = Column(String(255), nullable=False)
     slug = Column(String(255), nullable=False, unique=True)
     description = Column(Text, nullable=True)
