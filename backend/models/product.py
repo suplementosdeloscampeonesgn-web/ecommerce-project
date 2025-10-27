@@ -3,7 +3,7 @@ from core.database import Base
 
 class Product(Base):
     # ✅ CORREGIDO: Debe coincidir con tu tabla en NeonDB
-    __tablename__ = "Product" 
+    __tablename__ = "products" 
     # (O "Products", si así se llama. Debe ser exacto)
 
     id = Column(Integer, primary_key=True, index=True)
