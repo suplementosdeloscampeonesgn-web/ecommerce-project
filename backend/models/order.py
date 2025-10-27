@@ -19,13 +19,14 @@ class OrderStatus(enum.Enum):
 
 # --- MODELO DE PEDIDOS (ORDERS) ---
 class Order(Base):
-    # ✅ CORREGIDO: Debe coincidir con tu tabla en NeonDB
-    __tablename__ = "Order" 
-    # (Si tu tabla se llama "Orders", pon "Orders" aquí)
+    # ✅ CORREGIDO: plural y minúscula (como en NeonDB)
+    __tablename__ = "orders" 
 
     id = Column(Integer, primary_key=True, index=True)
-    # ✅ CORREGIDO: La FK debe apuntar a la tabla correcta
-    user_id = Column(Integer, ForeignKey("User.id"), nullable=False) 
+    
+    # ✅ CORREGIDO: Apunta a "users.id" (plural/minúscula)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False) 
+    
     order_number = Column(String, unique=True, nullable=False)
     status = Column(Enum(OrderStatus), default=OrderStatus.PENDING, nullable=False)
     total_amount = Column(Float, nullable=False)
@@ -43,15 +44,18 @@ class Order(Base):
 
 # --- MODELO DE ITEMS DE PEDIDO (ORDER ITEMS) ---
 class OrderItem(Base):
-    # ✅ CORREGIDO:
-    __tablename__ = "OrderItem" 
-    # (O "OrderItems", como se llame en NeonDB)
+    # ✅ CORREGIDO: plural y minúscula
+    __tablename__ = "order_items" 
 
     id = Column(Integer, primary_key=True, index=True)
-    # ✅ CORREGIDO:
-    order_id = Column(Integer, ForeignKey("Order.id"), nullable=False) 
-    # ✅ CORREGIDO: (Asegúrate de que 'Product.py' también esté corregido)
-    product_id = Column(Integer, ForeignKey("Product.id"), nullable=False) 
+    
+    # ✅ CORREGIDO: Apunta a "orders.id"
+    order_id = Column(Integer, ForeignKey("orders.id"), nullable=False) 
+    
+    # ✅ ¡ESTA ES LA CORRECCIÓN PRINCIPAL!
+    # Apunta a "products.id" (plural y minúscula)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=False) 
+    
     product_name = Column(String, nullable=False)
     product_price = Column(Float, nullable=False)
     quantity = Column(Integer, nullable=False)
@@ -64,10 +68,9 @@ class OrderItem(Base):
 
 # --- MODELO DE CUPONES (COUPONS) ---
 class Coupon(Base):
-    # ✅ CORREGIDO:
-    __tablename__ = "Coupon" 
-    # (O "Coupons", como se llame en NeonDB)
-
+    # ✅ CORREGIDO: plural y minúscula
+    __tablename__ = "coupons" 
+    
     id = Column(Integer, primary_key=True, index=True)
     code = Column(String, unique=True, nullable=False)
     discount_type = Column(String, nullable=False)
