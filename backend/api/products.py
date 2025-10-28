@@ -32,7 +32,7 @@ async def get_product_by_id(product_id: int, db: AsyncSession = Depends(get_db))
     """Obtiene un producto específico por su ID."""
     try:
         result = await db.execute(select(ProductModel).where(ProductModel.id == product_id)) 
-        product = result.scalar_one_or_one()
+        product = result.scalar_one_or_none()
         if product is None:
             raise HTTPException(status_code=404, detail="Producto no encontrado")
         return product
