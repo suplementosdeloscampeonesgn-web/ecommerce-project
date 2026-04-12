@@ -2,9 +2,9 @@
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.pool import NullPool # <-- Añadido vital para Serverless
 from urllib.parse import urlparse, parse_qs, urlunparse
 from core.config import settings
-
 
 # --- Conexión a la Base de Datos ---
 
@@ -25,22 +25,13 @@ base_url = urlunparse(parsed_url._replace(query=""))
 if base_url.endswith("?"):
     base_url = base_url[:-1]
 
-# 4. Log de depuración
-print("=" * 80)
-print("ATENCIÓN: La aplicación se está conectando con la siguiente configuración:")
-print(f"URL Base: {base_url}")
-print(f"Argumentos de conexión: {connect_args}")
-print("=" * 80)
-
-# 5. Motor SQLAlchemy (optimizado para NeonDB)
+# 4. Motor SQLAlchemy (Optimizado para Serverless / Vercel)
+# Usamos NullPool para no mantener conexiones "zombies" en las Lambdas
 async_engine = create_async_engine(
     base_url.replace("postgresql://", "postgresql+asyncpg://"),
     connect_args=connect_args,
-    pool_size=5,             # conexiones estables mínimas
-    max_overflow=10,         # conexiones extra si el pool se llena
-    pool_recycle=180,        # recicla conexiones cada 3 minutos
-    pool_timeout=30,         # espera antes de lanzar error de pool lleno
-    echo=False               # cambia a True para debug SQL
+    poolclass=NullPool, # <-- Desactiva el pool interno de SQLAlchemy
+    echo=False          # cambia a True para debug SQL
 )
 
 # --- Configuración de la sesión ---
@@ -50,7 +41,6 @@ AsyncSessionLocal = sessionmaker(
     expire_on_commit=False
 )
 Base = declarative_base()
-
 
 # --- Dependencia de Sesión ---
 async def get_db():
@@ -63,12 +53,12 @@ async def get_db():
         finally:
             await session.close()
 
-
 # --- Creación de Tablas ---
+# Nota: En Vercel, es mejor no llamar a esto en el lifespan del main.py
 async def create_tables():
     from models.product import Product
-    from models.user import User
-    from models.order import Order, OrderItem
+    # from models.user import User  # Descomenta cuando uses este modelo
+    # from models.order import Order, OrderItem # Descomenta cuando uses este modelo
 
     async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
