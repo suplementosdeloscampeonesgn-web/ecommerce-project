@@ -2,7 +2,7 @@
 
 import bcrypt from "bcryptjs";
 import { signIn } from "@/auth";
-import { prisma } from "@/app/lib/prisma";
+import { prisma } from "@/app/lib/prisma"; // Import respetado al 100%
 
 export type AuthActionResult =
   | { ok: true }
@@ -20,19 +20,24 @@ export async function registerUser(
   if (!email || !password) {
     return { ok: false, error: "El correo y la contraseña son obligatorios." };
   }
+
   if (password.length < 8) {
     return {
       ok: false,
-      error: "La contraseña debe tener al menos 8 caracteres.",
+      error: "La contraseña debe tener al menos 8 caracteres para asegurar el búnker.",
     };
   }
 
   try {
-    const existing = await prisma.user.findUnique({ where: { email } });
+    const existing = await prisma.user.findUnique({ 
+      where: { email },
+      select: { id: true } // Optimización de consulta
+    });
+    
     if (existing) {
       return {
         ok: false,
-        error: "Ya existe una cuenta con este correo electrónico.",
+        error: "Este correo ya pertenece a un recluta activo. Intenta iniciar sesión.",
       };
     }
 
@@ -50,10 +55,11 @@ export async function registerUser(
     });
 
     return { ok: true };
-  } catch {
+  } catch (error) {
+    console.error("[AUTH_REGISTER_ERROR]", error);
     return {
       ok: false,
-      error: "No se pudo crear la cuenta. Intenta de nuevo más tarde.",
+      error: "Fallo en la base de datos central. Intenta de nuevo más tarde.",
     };
   }
 }
@@ -77,28 +83,31 @@ export async function loginUser(
     });
 
     if (typeof url !== "string") {
-      return { ok: false, error: "No se pudo iniciar sesión." };
+      return { ok: false, error: "Las credenciales rebotaron. Intenta de nuevo." };
     }
 
     let parsed: URL;
     try {
-      parsed = new URL(url, "http://localhost");
+      // CORRECCIÓN VITAL PARA PRODUCCIÓN: 
+      // Se utiliza tu dominio real como base para evitar fallos de parseo en Vercel/Render
+      parsed = new URL(url, "https://suplementosdeloscampeonesgn.shop");
     } catch {
-      return { ok: false, error: "No se pudo iniciar sesión." };
+      return { ok: false, error: "Error interno de redirección." };
     }
 
     if (parsed.searchParams.get("error")) {
       return {
         ok: false,
-        error: "Correo o contraseña incorrectos.",
+        error: "Correo o contraseña incorrectos. Acceso denegado.",
       };
     }
 
     return { ok: true };
-  } catch {
+  } catch (error) {
+    console.error("[AUTH_LOGIN_ERROR]", error);
     return {
       ok: false,
-      error: "Correo o contraseña incorrectos.",
+      error: "Correo o contraseña incorrectos. Acceso denegado.",
     };
   }
 }
