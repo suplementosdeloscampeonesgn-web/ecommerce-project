@@ -1,4 +1,5 @@
-import { prisma } from "../../../../lib/prisma";
+// CORRECCIÓN: Le quitamos un nivel de retroceso (un ../) a la ruta
+import { prisma } from "../../../lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 

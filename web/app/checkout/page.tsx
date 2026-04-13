@@ -3,7 +3,8 @@
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import useCartStore from "../../store/cartStore";
+// CORRECCIÓN: Agregamos las llaves { } aquí abajo
+import { useCartStore } from "../../store/cartStore";
 import { createOrder } from "../actions/orderActions";
 
 export default function CheckoutPage() {
