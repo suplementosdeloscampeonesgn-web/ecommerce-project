@@ -1,0 +1,157 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ==========================================
+// ENUMS (Listas de valores permitidos)
+// ==========================================
+
+enum AuthProvider {
+  GOOGLE
+  EMAIL
+  @@map("authprovider")
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  PROCESANDO
+  ENVIADO
+  COMPLETADO
+  @@map("orderstatus")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+  @@map("userrole")
+}
+
+// ==========================================
+// MODELOS PRINCIPALES
+// ==========================================
+
+model User {
+  id              Int       @id @default(autoincrement())
+  name            String?   @db.VarChar(255)
+  email           String    @unique @db.VarChar(255)
+  role            String?   @default("customer") @db.VarChar(50)
+  provider        String?   @default("local") @db.VarChar(50)
+  is_active       Boolean?  @default(true)
+  password        String?   @db.VarChar(255)
+  hashed_password String?   @db.VarChar(255)
+  google_id       String?   @db.VarChar(255)
+  created_at      DateTime? @db.Timestamptz(6)
+  updated_at      DateTime? @db.Timestamptz(6)
+  
+  addresses       Address[]
+  orders          Order[]
+
+  @@map("users") // Conecta el modelo 'User' con la tabla 'users'
+}
+
+model Product {
+  id            Int         @id @default(autoincrement())
+  name          String      @db.VarChar(255)
+  slug          String      @unique @db.VarChar(255)
+  description   String?
+  category      String?     @db.VarChar(100)
+  price         Float
+  compare_price Float?
+  sku           String      @unique @db.VarChar(100)
+  stock         Int?        @default(0)
+  images        String?
+  is_active     Boolean?    @default(true)
+  is_featured   Boolean?    @default(false)
+  created_at    DateTime?   @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime?   @db.Timestamptz(6)
+  image_url     String?     @db.VarChar(255)
+  brand         String?     @db.VarChar(100)
+  
+  order_items   OrderItem[]
+
+  @@index([category], map: "idx_products_category")
+  @@map("products")
+}
+
+model Address {
+  id           Int       @id @default(autoincrement())
+  user_id      Int
+  name         String?   @db.VarChar(100)
+  address_line String    @db.VarChar(255)
+  city         String    @db.VarChar(100)
+  state        String    @db.VarChar(100)
+  postal_code  String    @db.VarChar(20)
+  country      String?   @default("México") @db.VarChar(100)
+  phone        String?   @db.VarChar(30)
+  is_default   Boolean?  @default(false)
+  created_at   DateTime? @default(now()) @db.Timestamptz(6)
+  
+  user         User      @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("addresses")
+}
+
+model Order {
+  id               Int           @id @default(autoincrement())
+  user_id          Int
+  order_number     String        @unique @db.VarChar
+  status           OrderStatus?
+  total_amount     Float
+  shipping_address String        @db.VarChar
+  shipping_type    String?       @db.VarChar(20)
+  shipping_cost    Float?
+  payment_method   String        @db.VarChar
+  created_at       DateTime?     @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime?     @db.Timestamptz(6)
+  
+  user             User          @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  order_items      OrderItem[]
+
+  @@index([id], map: "ix_orders_id")
+  @@map("orders")
+}
+
+model OrderItem {
+  id            Int     @id @default(autoincrement())
+  order_id      Int
+  product_id    Int
+  product_name  String  @db.VarChar
+  product_price Float
+  quantity      Int
+  line_total    Float
+  
+  order         Order   @relation(fields: [order_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  product       Product @relation(fields: [product_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([id], map: "ix_order_items_id")
+  @@map("order_items")
+}
+
+model Coupon {
+  id             Int       @id @default(autoincrement())
+  code           String    @unique @db.VarChar
+  discount_type  String    @db.VarChar
+  discount_value Float
+  minimum_amount Float?
+  max_uses       Int?
+  used_count     Int?
+  is_active      Boolean?
+  expires_at     DateTime? @db.Timestamptz(6)
+  created_at     DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([id], map: "ix_coupons_id")
+  @@map("coupons")
+}
